@@ -1,0 +1,14 @@
+[
+  {
+    "title": "Return and Refund Policy",
+    "content": "Customers may request a refund within 30 days of purchase. Duplicate charges are eligible for immediate refund. All refunds require supervisor approval for amounts over $25."
+  },
+  {
+    "title": "Account Deletion Process",
+    "content": "Account deletion is permanent and irreversible. It requires multi-party approval: a safety check by the automated system AND human operator confirmation. All customer data will be purged in compliance with GDPR."
+  },
+  {
+    "title": "Escalation Procedures",
+    "content": "High-risk actions (refunds over $100, account deletions, data exports) must be escalated to a supervisor agent. The supervisor evaluates the request against company policy before approving or rejecting."
+  }
+]

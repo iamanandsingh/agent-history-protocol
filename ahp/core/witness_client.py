@@ -1,0 +1,59 @@
+"""Witness client — sends checkpoints to witness servers (Section 8)."""
+from __future__ import annotations
+import json
+import time
+from typing import Optional, Dict, List
+from urllib.request import urlopen, Request
+from urllib.error import URLError
+
+
+def send_checkpoint(endpoint: str, agent_id: str, chain_hash: str,
+                    sequence: int, timestamp_ms: int,
+                    signature: str = "", signing_key_id: str = "") -> Optional[Dict]:
+    """Send a checkpoint to a witness server. Returns receipt or None on failure."""
+    url = endpoint.rstrip('/') + '/ahp/v1/checkpoints'
+    payload = json.dumps({
+        'agent_id': agent_id,
+        'chain_hash': chain_hash,
+        'sequence': sequence,
+        'timestamp_ms': timestamp_ms,
+        'signature': signature,
+        'signing_key_id': signing_key_id,
+    }).encode()
+
+    retries = 3
+    delays = [1, 2, 4]  # exponential backoff per Section 8.5
+
+    for attempt in range(retries):
+        try:
+            req = Request(url, data=payload, headers={'Content-Type': 'application/json'})
+            with urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read())
+        except (URLError, OSError, json.JSONDecodeError):
+            if attempt < retries - 1:
+                time.sleep(delays[attempt])
+            else:
+                return None
+    return None
+
+
+def get_identity(endpoint: str) -> Optional[Dict]:
+    """Get witness identity (public key)."""
+    url = endpoint.rstrip('/') + '/ahp/v1/identity'
+    try:
+        req = Request(url)
+        with urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except (URLError, OSError):
+        return None
+
+
+def get_receipts_for_agent(endpoint: str, agent_id: str) -> List[Dict]:
+    """Get all receipts for an agent from a witness."""
+    url = endpoint.rstrip('/') + '/ahp/v1/agents/%s/checkpoints' % agent_id
+    try:
+        req = Request(url)
+        with urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except (URLError, OSError):
+        return []

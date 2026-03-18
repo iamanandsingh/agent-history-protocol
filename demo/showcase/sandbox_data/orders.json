@@ -1,0 +1,42 @@
+[
+  {
+    "order_id": 7891,
+    "customer_id": 442,
+    "amount": 49.99,
+    "status": "charged",
+    "date": "2026-03-15",
+    "item": "Premium Plan (Monthly)"
+  },
+  {
+    "order_id": 7891,
+    "customer_id": 442,
+    "amount": 49.99,
+    "status": "charged",
+    "date": "2026-03-15",
+    "item": "Premium Plan (Monthly) \u2014 DUPLICATE"
+  },
+  {
+    "order_id": 8234,
+    "customer_id": 589,
+    "amount": 29.99,
+    "status": "charged",
+    "date": "2026-03-14",
+    "item": "Basic Plan (Monthly)"
+  },
+  {
+    "order_id": 8567,
+    "customer_id": 103,
+    "amount": 99.99,
+    "status": "charged",
+    "date": "2026-03-10",
+    "item": "Enterprise Plan (Monthly)"
+  },
+  {
+    "order_id": 8012,
+    "customer_id": 442,
+    "amount": 15.0,
+    "status": "charged",
+    "date": "2026-02-28",
+    "item": "Add-on: Extra Storage"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "id": 442,
+    "name": "Sarah Chen",
+    "email": "sarah@example.com",
+    "status": "active",
+    "since": "2024-03-15"
+  },
+  {
+    "id": 589,
+    "name": "Marcus Johnson",
+    "email": "marcus@example.com",
+    "status": "active",
+    "since": "2025-01-20"
+  },
+  {
+    "id": 103,
+    "name": "Emma Wilson",
+    "email": "emma@example.com",
+    "status": "active",
+    "since": "2023-11-08"
+  }
+]
