@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional  # noqa: F401 (used in annotations)
 
 from ahp.core.chain import (
     ChainReader,
