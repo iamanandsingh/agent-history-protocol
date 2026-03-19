@@ -24,6 +24,9 @@ class VerifyResult:
 def verify_chain(path: str) -> VerifyResult:
     """Verify hash chain integrity per Section 5.4.
 
+    Uses streaming iteration (iter_records) to avoid loading the entire
+    chain into memory at once.
+
     Checks:
     1. First record's prev_hash == 32 zero bytes
     2. Each subsequent record's prev_hash == SHA-256(stored_bytes of previous)
@@ -31,16 +34,13 @@ def verify_chain(path: str) -> VerifyResult:
     4. GapRecord constraints (first_lost_sequence, last_lost_sequence, count)
     """
     reader = ChainReader(path)
-    all_bytes = reader.read_all()
-
-    if len(all_bytes) == 0:
-        return VerifyResult(valid=True, records_checked=0, gaps=0)
 
     expected_seq = 1
     gaps = 0
     prev_stored = None
+    records_checked = 0
 
-    for i, stored in enumerate(all_bytes):
+    for i, stored in enumerate(reader.iter_records()):
         envelope = parse_envelope(stored)
         seq = envelope['sequence']
         prev_hash = envelope['prev_hash']
@@ -125,9 +125,10 @@ def verify_chain(path: str) -> VerifyResult:
 
         expected_seq = seq + 1
         prev_stored = stored
+        records_checked = i + 1
 
     return VerifyResult(
         valid=True,
-        records_checked=len(all_bytes),
+        records_checked=records_checked,
         gaps=gaps,
     )

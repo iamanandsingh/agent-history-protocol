@@ -147,6 +147,9 @@ class TestLangChainInterface(unittest.TestCase):
         self.assertTrue(hasattr(handler, 'on_tool_error'))
         self.assertTrue(hasattr(handler, 'on_llm_start'))
         self.assertTrue(hasattr(handler, 'on_llm_end'))
+        self.assertTrue(hasattr(handler, 'on_llm_error'))
+        self.assertTrue(hasattr(handler, 'on_chain_start'))
+        self.assertTrue(hasattr(handler, 'on_chain_end'))
         writer.close()
 
     def test_simulated_tool_callbacks(self):
@@ -207,6 +210,115 @@ class TestLangChainInterface(unittest.TestCase):
         reader = ChainReader(chain_path)
         records = reader.read_all()
         self.assertGreaterEqual(len(records), 1)
+
+    def test_recorder_based_handler(self):
+        """Test LangChain handler with full AHPRecorder (PII filtering, evidence, etc.)."""
+        from ahp.integrations.langchain import AHPCallbackHandler
+        from ahp.recorder import AHPRecorder
+
+        tmpdir = tempfile.mkdtemp()
+        chain_path = os.path.join(tmpdir, "lc_recorder.ahp")
+        evidence_path = os.path.join(tmpdir, "evidence")
+
+        recorder = AHPRecorder(
+            agent_name="langchain-test",
+            chain_path=chain_path,
+            level=1,
+            evidence_path=evidence_path,
+            filter_presets=["pii-us", "credentials"],
+            checkpoint_interval=9999,
+        )
+        handler = AHPCallbackHandler(recorder)
+
+        # Simulate tool call with PII in the parameters
+        handler.on_tool_start(
+            serialized={"name": "lookup"},
+            input_str='{"ssn": "123-45-6789", "query": "test"}',
+            run_id="run-pii",
+            name="lookup_customer",
+        )
+        handler.on_tool_end(
+            output='{"name": "John", "status": "active"}',
+            run_id="run-pii",
+            name="lookup_customer",
+        )
+
+        # Simulate LLM call
+        handler.on_llm_start(
+            serialized={"model": "gpt-4"},
+            prompts=["Summarize the customer info"],
+            run_id="run-llm",
+        )
+
+        # Create a mock response object
+        class MockResponse:
+            llm_output = {"model_name": "gpt-4", "token_usage": {"prompt_tokens": 10, "completion_tokens": 25}}
+            def __str__(self):
+                return "Customer John is active."
+
+        handler.on_llm_end(
+            response=MockResponse(),
+            run_id="run-llm",
+        )
+
+        recorder.close()
+
+        # Verify chain integrity
+        result = verify_chain(chain_path)
+        self.assertTrue(result.valid, f"Chain invalid: {result.error}")
+
+        # Verify records were created (boot + 2 actions = 3+)
+        reader = ChainReader(chain_path)
+        records = reader.read_all()
+        self.assertGreaterEqual(len(records), 3)
+
+        # Verify evidence was stored
+        evidence_files = list(os.listdir(evidence_path))
+        self.assertGreater(len(evidence_files), 0, "Evidence should be stored")
+
+    def test_recorder_handler_with_tool_error(self):
+        """Test LangChain handler records errors via AHPRecorder."""
+        from ahp.integrations.langchain import AHPCallbackHandler
+        from ahp.recorder import AHPRecorder
+
+        tmpdir = tempfile.mkdtemp()
+        chain_path = os.path.join(tmpdir, "lc_rec_err.ahp")
+
+        recorder = AHPRecorder(
+            agent_name="langchain-err-test",
+            chain_path=chain_path,
+            level=1,
+            checkpoint_interval=9999,
+        )
+        handler = AHPCallbackHandler(recorder)
+
+        handler.on_tool_start(
+            serialized={"name": "risky_tool"},
+            input_str='{"action": "delete"}',
+            run_id="run-err",
+            name="risky_tool",
+        )
+        handler.on_tool_error(
+            error=RuntimeError("Permission denied"),
+            run_id="run-err",
+            name="risky_tool",
+        )
+
+        # Also test LLM error
+        handler.on_llm_start(
+            serialized={"model": "claude"},
+            prompts=["test prompt"],
+            run_id="run-llm-err",
+        )
+        handler.on_llm_error(
+            error=TimeoutError("API timeout"),
+            run_id="run-llm-err",
+        )
+
+        recorder.close()
+
+        result = verify_chain(chain_path)
+        self.assertTrue(result.valid, f"Chain invalid: {result.error}")
 
 
 class TestCIValidation(unittest.TestCase):

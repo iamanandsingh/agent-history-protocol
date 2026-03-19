@@ -2,6 +2,8 @@
 
 Version 0.2 · March 2026
 
+**Note:** This document is informative. The normative specification is `agent-history-protocol-spec.md`. Capitalized keywords (MUST, SHOULD, etc.) are used for emphasis, not per RFC 2119.
+
 ---
 
 ## 1. Protocol Overview
@@ -1144,19 +1146,19 @@ The following items are intentionally deferred from this PSD to the formal proto
 
 **Verification algorithm:**
 
-1. **GapRecord payload validation.** The verification algorithm accepts GapRecords when `sequence > expected_seq`. It does not validate that `GapPayload.first_lost_sequence == expected_seq` or that `GapPayload.last_lost_sequence == GapRecord.sequence - 1`. Without these checks, a GapRecord could under-report data loss (e.g., claim 4 records lost when 6 were actually skipped). The spec should add these assertions.
+1. **GapRecord payload validation.** ~~The verification algorithm accepts GapRecords when `sequence > expected_seq`. It does not validate that `GapPayload.first_lost_sequence == expected_seq` or that `GapPayload.last_lost_sequence == GapRecord.sequence - 1`.~~ **Resolved in spec v1.0-draft-01:** The verification algorithm (Section 5.4) now asserts `first_lost_sequence == expected_seq`, `last_lost_sequence == sequence - 1`, and `count == last_lost_sequence - first_lost_sequence + 1`.
 
-2. **RecoveryRecord vs GapRecord ordering.** After a crash, the SDK emits both a RecoveryRecord (documenting recovery state) and a GapRecord (documenting lost records). The spec must define the required ordering: RecoveryRecord first, then GapRecord — or vice versa. This affects sequence numbering.
+2. **RecoveryRecord vs GapRecord ordering.** ~~After a crash, the SDK emits both a RecoveryRecord (documenting recovery state) and a GapRecord (documenting lost records). The spec must define the required ordering.~~ **Resolved in spec v1.0-draft-01:** Section 3.6 defines that RecoveryRecord is emitted first (documenting recovery state), then GapRecord follows (documenting lost records). Sequence numbering accounts for both records.
 
 **Evidence model:**
 
 3. **128-bit evidence hash collisions.** Evidence files are named by truncated 128-bit SHA-256 hashes. Birthday bound collision probability becomes non-negligible at ~2^64 records. The spec's Security Considerations should quantify this risk and recommend full 256-bit naming for high-volume deployments.
 
-4. **`redacted` flag semantics.** When PII filters are configured, is `redacted` set to `true` on every record (because filters were active) or only when a filter actually matched and changed the content? The former is simpler. The latter is more informative. The spec must pick one and add a test vector.
+4. **`redacted` flag semantics.** ~~When PII filters are configured, is `redacted` set to `true` on every record or only when a filter actually matched?~~ **Resolved in spec v1.0-draft-01:** Section 3.2 defines that `redacted` is true only when at least one PII filter matched and modified the content. False when no filters are configured or when filters were configured but no pattern matched.
 
 **PII filters:**
 
-5. **`filter_config_hash` computation.** The BootRecord includes `filter_config_hash` (SHA-256 of the active filter config). The spec must define exactly what is hashed — the raw YAML text? A canonical JSON representation of the filter list (names, patterns, replacements, scopes in sorted order)? This must be cross-SDK deterministic.
+5. **`filter_config_hash` computation.** ~~The spec must define exactly what is hashed for `filter_config_hash`.~~ **Resolved in spec v1.0-draft-01:** Section 3.5 specifies that `filter_config_hash` is SHA-256 of the canonical JSON representation of the active filter configuration (filter names, patterns, replacements, and scopes in sorted order).
 
 6. **`inference_system_message` scope requires LLM API parsing.** This filter scope requires the SDK to understand each LLM provider's message format (OpenAI `messages[].role`, Anthropic separate `system` parameter, etc.). The spec should define the canonical message extraction rules or defer this to the SDK implementation guide with provider-specific examples.
 
@@ -1168,11 +1170,11 @@ The following items are intentionally deferred from this PSD to the formal proto
 
 **Signing:**
 
-9. **`chain_hash` in BatchCheckpoint vs `prev_hash` in envelope.** The BatchCheckpoint contains `chain_hash: bytes[32] (current chain head hash)`. The BatchCheckpoint's own `prev_hash` in the envelope also contains the hash of the previous record. These are the same value. The spec should clarify whether `chain_hash` serves a distinct purpose (e.g., for witness checkpoints) or is intentionally redundant for readability.
+9. **`chain_hash` in BatchCheckpoint vs `prev_hash` in envelope.** ~~These are the same value. The spec should clarify whether `chain_hash` serves a distinct purpose.~~ **Resolved in spec v1.0-draft-01:** Section 3.4 clarifies that `chain_hash` is intentionally redundant — it provides the value sent to witnesses (Section 8) without requiring envelope parsing. The field description now states: "Equal to this record's `prev_hash`."
 
 **Inference recording:**
 
-10. **Behavior when `inference.record = false` and HTTP interceptor is active.** If inference recording is disabled, should the HTTP interceptor silently skip LLM API calls entirely, or record them as regular HTTP `TOOL_CALL` records without the INFERENCE semantics? The former means LLM calls are invisible. The latter means they're visible but not semantically marked. The spec must define the expected behavior.
+10. **Behavior when `inference.record = false` and HTTP interceptor is active.** ~~Should the HTTP interceptor silently skip LLM API calls or record them as regular TOOL_CALL records?~~ **Resolved in spec v1.0-draft-01:** Section 3.2 specifies that LLM API calls MUST be silently skipped — no record is emitted. The BootRecord's `inference_recording = false` documents this policy for auditors.
 
 ### Documents
 

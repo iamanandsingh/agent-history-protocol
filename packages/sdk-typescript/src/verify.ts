@@ -26,21 +26,18 @@ export interface VerifyResult {
 
 /**
  * Verify hash chain integrity per Section 5.4.
+ * Streams records one at a time from the chain file to avoid loading
+ * the entire chain into memory.
  */
 export function verifyChain(path: string): VerifyResult {
   const reader = new ChainReader(path);
-  const allBytes = reader.readAll();
-
-  if (allBytes.length === 0) {
-    return { valid: true, records_checked: 0, gaps: 0 };
-  }
 
   let expectedSeq = 1n;
   let gaps = 0;
   let prevStored: Uint8Array | null = null;
+  let i = 0;
 
-  for (let i = 0; i < allBytes.length; i++) {
-    const stored = allBytes[i];
+  for (const stored of reader.iterRecords()) {
     const envelope = parseEnvelope(stored);
     const seq = envelope.sequence;
     const prevHash = envelope.prev_hash;
@@ -88,7 +85,6 @@ export function verifyChain(path: string): VerifyResult {
         };
       }
 
-      // Validate GapRecord payload constraints (Section 3.3)
       const gapData = parseGapPayload(envelope.payload_bytes);
       const gapFirst = gapData.first_lost_sequence;
       const gapLast = gapData.last_lost_sequence;
@@ -137,11 +133,12 @@ export function verifyChain(path: string): VerifyResult {
 
     expectedSeq = seq + 1n;
     prevStored = stored;
+    i++;
   }
 
   return {
     valid: true,
-    records_checked: allBytes.length,
+    records_checked: i,
     gaps,
   };
 }

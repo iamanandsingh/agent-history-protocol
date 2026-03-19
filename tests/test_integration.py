@@ -380,7 +380,9 @@ class TestSigning(unittest.TestCase):
     def test_merkle_root_single(self):
         h = hashlib.sha256(b'test').digest()
         root = compute_merkle_root([h])
-        self.assertEqual(root, h)
+        # RFC 6962 leaf prefix: root of single element is SHA256(0x00 + h)
+        expected = hashlib.sha256(b'\x00' + h).digest()
+        self.assertEqual(root, expected)
 
     def test_merkle_root_multiple(self):
         hashes = [hashlib.sha256(f'record{i}'.encode()).digest() for i in range(5)]

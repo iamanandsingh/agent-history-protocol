@@ -13,30 +13,28 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-import platform
+import logging
 import time
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Callable, Optional, List, Dict, Any
 
+from ahp._base_recorder import RecorderBase
 from ahp.core.types import (
     RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, ChainLevel, FsyncMode,
+    AuthorizationType, GapReason,
     ZERO_HASH_16, ZERO_HASH_32,
 )
 from ahp.core.records import (
-    ActionPayload, BootPayload, CheckpointPayload, GapPayload,
-    KeyPayload, WitnessPayload,
-    Authorization, AuthorizationEntry,
+    ActionPayload, GapPayload,
+    Authorization, Record,
 )
 from ahp.core.async_chain import AsyncChainWriter
-from ahp.core.evidence import EvidenceStore
-from ahp.core.filters import FilterPipeline
-from ahp.core.signing import generate_keypair, sign, compute_merkle_root, HAS_CRYPTO
-from ahp.core.uuid7 import uuid7
 from ahp.config import AHPConfig
 
+logger = logging.getLogger("ahp.recorder")
 
-class AsyncAHPRecorder:
+
+class AsyncAHPRecorder(RecorderBase):
     """Async version of AHPRecorder for asyncio agent frameworks.
 
     Wires: async chain writer + evidence + PII filters + signing + witness.
@@ -48,46 +46,30 @@ class AsyncAHPRecorder:
                  evidence_path: Optional[str] = None,
                  filter_presets: Optional[List[str]] = None,
                  checkpoint_interval: int = 1000,
-                 witness_endpoints: Optional[List[str]] = None):
+                 witness_endpoints: Optional[List[str]] = None,
+                 on_record_written: Optional[Callable[[Record], None]] = None,
+                 on_error: Optional[Callable[[Exception, str], None]] = None):
 
-        self.config = config or AHPConfig(
-            level=level, agent_name=agent_name,
-            checkpoint_interval=checkpoint_interval,
-        )
-
-        agent_name = agent_name or self.config.agent_name or "ahp-agent"
+        agent_name = agent_name or (config.agent_name if config else "") or "ahp-agent"
         path = chain_path or f"{agent_name}.ahp"
 
+        # ---- shared initialization (config, filters, evidence, signing) ----
+        self._init_shared_components(
+            agent_name=agent_name,
+            level=level,
+            config=config,
+            evidence_path=evidence_path,
+            filter_presets=filter_presets,
+            custom_filters=None,
+            checkpoint_interval=checkpoint_interval,
+            witness_endpoints=witness_endpoints,
+            on_record_written=on_record_written,
+            on_error=on_error,
+        )
+
         self.writer = AsyncChainWriter(path)
-        self.level = self.config.level
-        self.agent_name = agent_name
-
-        # Evidence store
-        self.evidence_store = None
-        if self.config.evidence_record:
-            ep = evidence_path or "evidence"
-            self.evidence_store = EvidenceStore(ep)
-
-        # PII filters
-        presets = filter_presets or self.config.filter_presets
-        self.filter_pipeline = FilterPipeline(presets=presets) if presets else None
-
-        # Signing (Level 2+)
-        self.keypair = None
-        if self.level >= 2:
-            self.keypair = generate_keypair()
-
-        # Witness (Level 3)
-        self.witness_endpoints = witness_endpoints or []
-        if self.config.witness.enabled:
-            self.witness_endpoints = self.config.witness.endpoints
-
-        # Counters
-        self._checkpoint_interval = self.config.checkpoint_interval
-        self._records_since_checkpoint = 0
-        self._record_hashes: List[bytes] = []
-        self._pending_gap = False
-        self._gap_detail = ""
+        # Alias for base class structured logging
+        self._chain = self.writer
         self._started = False
 
     async def start(self) -> None:
@@ -95,32 +77,33 @@ class AsyncAHPRecorder:
         await self.writer.start()
         self._started = True
 
-        # Boot record
-        await self.writer.write_record(BootPayload(
-            sdk_name="ahp-python",
-            sdk_version="0.1.0",
-            agent_name=self.agent_name,
-            runtime=f"python {platform.python_version()}",
-            chain_level=ChainLevel(self.level),
-            inference_recording=self.config.inference_record,
-            inference_evidence=self.config.inference_evidence,
-            evidence_recording=self.config.evidence_record,
-            authorization_recording=self.config.authorization_record,
-            filter_config_hash=self.filter_pipeline.config_hash() if self.filter_pipeline else ZERO_HASH_32,
-        ))
+        # Boot record (using shared payload construction)
+        boot_payload = self._build_boot_payload()
+        record = await self.writer.write_record(boot_payload)
+        self._track_record(record)
 
         # Key genesis (Level 2+)
-        if self.level >= 2 and self.keypair:
-            await self.writer.write_record(KeyPayload(
-                public_key=self.keypair.public_key_bytes,
-                key_id=self.keypair.key_id,
-            ))
+        key_payload = self._build_key_genesis_payload()
+        if key_payload is not None:
+            record = await self.writer.write_record(key_payload)
+            self._track_record(record)
 
     async def stop(self) -> None:
         """Flush and stop the async writer."""
         if self._started:
             await self.writer.stop()
             self._started = False
+
+    async def close(self) -> None:
+        """Stop the writer and release resources."""
+        await self.stop()
+
+    async def __aenter__(self) -> "AsyncAHPRecorder":
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
 
     async def record_action(self, tool_name: str = "",
                             parameters: bytes = b'',
@@ -140,29 +123,18 @@ class AsyncAHPRecorder:
         if self._pending_gap:
             await self._emit_pending_gap()
 
-        # PII filtering
-        redacted = False
-        if self.filter_pipeline:
-            params_hash, filtered_params, r1 = self.filter_pipeline.hash_payload(parameters, "parameters")
-            result_hash, filtered_result, r2 = self.filter_pipeline.hash_payload(result, "results")
-            redacted = r1 or r2
-        else:
-            params_hash = hashlib.sha256(parameters).digest()[:16] if parameters else ZERO_HASH_16
-            result_hash = hashlib.sha256(result).digest()[:16] if result else ZERO_HASH_16
-            filtered_params = parameters
-            filtered_result = result
+        # PII filtering (shared logic from base)
+        param_hash, result_hash, filtered_params, filtered_result, redacted = (
+            self._filter_action_payloads(parameters, result)
+        )
 
-        # Evidence
-        if self.evidence_store:
-            if filtered_params:
-                self.evidence_store.store(filtered_params)
-            if filtered_result:
-                self.evidence_store.store(filtered_result)
+        # Evidence (shared logic from base)
+        self._store_evidence(filtered_params, filtered_result, param_hash)
 
         payload = ActionPayload(
             parent_action_id=parent_action_id or b'\x00' * 16,
             tool_name=tool_name,
-            parameters_hash=params_hash,
+            parameters_hash=param_hash,
             result_hash=result_hash,
             result_status=ResultStatus.SUCCESS,
             response_time_ms=response_time_ms,
@@ -178,10 +150,8 @@ class AsyncAHPRecorder:
 
         record = await self.writer.write_record(payload, session_id=session_id)
 
-        # Track for checkpoints
-        self._records_since_checkpoint += 1
-        if record._stored_bytes:
-            self._record_hashes.append(hashlib.sha256(record._stored_bytes).digest())
+        # Track for checkpoints (shared logic from base)
+        self._track_record(record)
 
         # Auto-checkpoint
         if self._records_since_checkpoint >= self._checkpoint_interval:
@@ -213,36 +183,27 @@ class AsyncAHPRecorder:
 
     async def emit_checkpoint(self) -> None:
         """Emit a BatchCheckpoint record."""
-        merkle_root = ZERO_HASH_32
-        sig = b'\x00' * 64
-        key_id = ZERO_HASH_32
-
-        if self._record_hashes:
-            merkle_root = compute_merkle_root(self._record_hashes)
-
-        if self.level >= 2 and self.keypair and HAS_CRYPTO:
-            sig = sign(merkle_root, self.keypair.private_key_bytes)
-            key_id = self.keypair.key_id
-
-        await self.writer.write_record(CheckpointPayload(
+        # Build checkpoint payload (shared logic from base)
+        payload = self._build_checkpoint_payload(
             record_count=self.writer.record_count + 1,
-            gap_count=0,
+            gap_count=self.writer.gap_count,
             chain_hash=self.writer.prev_hash,
-            merkle_root=merkle_root,
-            signature=sig,
-            signing_key_id=key_id,
-        ))
+        )
 
-        self._records_since_checkpoint = 0
-        self._record_hashes = []
+        await self.writer.write_record(payload)
+
+        # Reset counters (shared logic from base)
+        self._reset_checkpoint_counters()
 
     async def safe_record(self, **kwargs: Any) -> Optional[Record]:
         """Fail-open wrapper. Never crashes the agent."""
         try:
             return await self.record_action(**kwargs)
-        except Exception as e:
+        except Exception as exc:
             self._pending_gap = True
-            self._gap_detail = str(e)[:200]
+            self._gap_detail = str(exc)[:200]
+            self._log_warning("Async safe_record failed (will emit GapRecord): %s", exc)
+            self._fire_error_callback(exc, "async_safe_record")
             return None
 
     async def _emit_pending_gap(self) -> None:
@@ -253,7 +214,7 @@ class AsyncAHPRecorder:
                 first_lost_sequence=seq + 1,
                 last_lost_sequence=seq + 1,
                 count=1,
-                reason=5,  # INTERCEPTOR_FAILURE
+                reason=GapReason.INTERCEPTOR_FAILURE,
                 detail=self._gap_detail,
             ))
             self._pending_gap = False

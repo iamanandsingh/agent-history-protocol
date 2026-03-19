@@ -35,28 +35,28 @@ const MAGIC = Buffer.from("AHP\x00");
 const FILE_VERSION = 1;
 const HEADER_SIZE = 16; // 4 + 4 + 8
 
+// Pre-computed CRC32 lookup table (ISO 3309 / ITU-T V.42 polynomial)
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < 256; i++) {
+  let c = i;
+  for (let j = 0; j < 8; j++) {
+    if (c & 1) {
+      c = 0xEDB88320 ^ (c >>> 1);
+    } else {
+      c = c >>> 1;
+    }
+  }
+  CRC32_TABLE[i] = c;
+}
+
 /**
  * Compute CRC32 (same as Python zlib.crc32).
  * Node.js zlib does not directly expose crc32, so we use a manual table.
  */
 function crc32(data: Uint8Array): number {
-  // Build CRC32 table (ISO 3309 / ITU-T V.42 polynomial)
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let j = 0; j < 8; j++) {
-      if (c & 1) {
-        c = 0xEDB88320 ^ (c >>> 1);
-      } else {
-        c = c >>> 1;
-      }
-    }
-    table[i] = c;
-  }
-
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < data.length; i++) {
-    crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+    crc = CRC32_TABLE[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
   }
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
@@ -145,6 +145,12 @@ export class ChainWriter {
     // Serialize to canonical bytes
     const stored = canonicalBytes(record);
 
+    // Save old state for rollback on I/O failure
+    const oldPrevHash = this._prevHash;
+    const oldSequence = this._sequence;
+    const oldRecordCount = this._recordCount;
+    const oldGapCount = this._gapCount;
+
     // Update chain state
     this._prevHash = new Uint8Array(
       crypto.createHash("sha256").update(stored).digest()
@@ -155,27 +161,40 @@ export class ChainWriter {
     }
 
     // Write to file: [length][canonical_bytes][crc32]
-    const lengthBuf = uint32LEBuffer(stored.length);
-    const crcInput = Buffer.concat([lengthBuf, stored]);
-    const crcValue = crc32(crcInput);
-    const crcBuf = uint32LEBuffer(crcValue);
+    // NOTE: File-level locking is not implemented in the TS SDK.
+    // Concurrent writers to the same file are NOT supported.
+    try {
+      const lengthBuf = uint32LEBuffer(stored.length);
+      const crcInput = Buffer.concat([lengthBuf, stored]);
+      const crcValue = crc32(crcInput);
+      const crcBuf = uint32LEBuffer(crcValue);
 
-    const fd = fs.openSync(this.path, "a");
-    fs.writeSync(fd, lengthBuf);
-    fs.writeSync(fd, stored);
-    fs.writeSync(fd, crcBuf);
+      const fd = fs.openSync(this.path, "a");
+      try {
+        fs.writeSync(fd, lengthBuf);
+        fs.writeSync(fd, stored);
+        fs.writeSync(fd, crcBuf);
 
-    // fsync per spec Section 10.1
-    this._writesSinceFsync += 1;
-    if (this._fsyncMode === "every") {
-      fs.fsyncSync(fd);
-      this._writesSinceFsync = 0;
-    } else if (this._fsyncMode === "batch" && this._writesSinceFsync >= 100) {
-      fs.fsyncSync(fd);
-      this._writesSinceFsync = 0;
+        // fsync per spec Section 10.1
+        this._writesSinceFsync += 1;
+        if (this._fsyncMode === "every") {
+          fs.fsyncSync(fd);
+          this._writesSinceFsync = 0;
+        } else if (this._fsyncMode === "batch" && this._writesSinceFsync >= 100) {
+          fs.fsyncSync(fd);
+          this._writesSinceFsync = 0;
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch (e) {
+      // Rollback in-memory state so the chain stays consistent
+      this._prevHash = oldPrevHash;
+      this._sequence = oldSequence;
+      this._recordCount = oldRecordCount;
+      this._gapCount = oldGapCount;
+      throw e;
     }
-
-    fs.closeSync(fd);
 
     return record;
   }

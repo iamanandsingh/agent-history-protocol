@@ -72,3 +72,56 @@ export { ChainWriter, ChainReader, createChainFile } from "./chain";
 export { verifyChain, verifyChainFromBytes } from "./verify";
 
 export type { VerifyResult } from "./verify";
+
+// Validation
+export { MAX_RECORD_SIZE, validateRecord } from "./validation";
+
+export type { ValidationResult, ValidationError } from "./validation";
+
+// Evidence store
+export { EvidenceStore } from "./evidence";
+
+// PII filters
+export { Filter, FilterPipeline, PRESETS } from "./filters";
+
+export type { FilterDefinition } from "./filters";
+
+// Ed25519 signing
+export {
+  generateKeypair,
+  sign,
+  verifySignature,
+  computeMerkleRoot,
+} from "./signing";
+
+export type { KeyPair } from "./signing";
+
+// Configuration
+export {
+  loadConfig,
+  validateConfig,
+  defaultConfig,
+} from "./config";
+
+export type {
+  AHPConfig,
+  FilterConfig,
+  WitnessConfig,
+} from "./config";
+
+// Crash recovery
+export {
+  scanChain,
+  truncateChain,
+  recoverChain,
+} from "./recovery";
+
+export type { RecoveryResult } from "./recovery";
+
+// Recorder (main SDK entry point)
+export { AHPRecorder } from "./recorder";
+
+export type {
+  AHPRecorderOptions,
+  RecordActionOptions,
+} from "./recorder";

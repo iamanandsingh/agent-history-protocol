@@ -13,6 +13,7 @@ from typing import Optional
 
 from ahp.core.types import ZERO_HASH_32, RecordType
 from ahp.core.chain import MAGIC, HEADER_SIZE, parse_envelope
+from ahp.core.validation import MAX_RECORD_SIZE
 
 
 @dataclass
@@ -60,6 +61,9 @@ def scan_chain(path: str) -> RecoveryResult:
                 break
 
             length = struct.unpack('<I', length_bytes)[0]
+            # Check for unreasonable length (corrupt data)
+            if length > MAX_RECORD_SIZE:
+                break  # Treat as corrupt
             stored = f.read(length)
             if len(stored) < length:
                 break  # Truncated record
@@ -90,12 +94,20 @@ def scan_chain(path: str) -> RecoveryResult:
     else:
         last_prev_hash = ZERO_HASH_32
 
-    # Count truncated records (bytes after last valid)
+    # Count corrupt trailing segments (bytes after last valid record).
+    # We estimate the number of lost records by counting how many
+    # length+CRC frames (complete or partial) appear in the corrupt tail.
     file_size = p.stat().st_size
     truncated = 0
     if file_size > last_valid_offset:
-        # There are bytes after the last valid record — corrupt data
-        truncated = 1  # At least one partial/corrupt record
+        corrupt_bytes = file_size - last_valid_offset
+        if records_verified > 0:
+            # Estimate average record frame size (4B length + payload + 4B CRC)
+            avg_record_frame = (last_valid_offset - HEADER_SIZE) / records_verified
+            truncated = max(1, round(corrupt_bytes / avg_record_frame))
+        else:
+            # No valid records to estimate from — at least one corrupt segment
+            truncated = 1
 
     return RecoveryResult(
         records_verified=records_verified,

@@ -7,10 +7,14 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+
+logger = logging.getLogger("ahp.config")
 
 try:
     import yaml
@@ -90,12 +94,21 @@ def load_config(path: Optional[str] = None, agent_name: str = "") -> AHPConfig:
     config_path = _find_config(path)
 
     if config_path and HAS_YAML:
-        return _load_from_yaml(config_path, agent_name)
+        config = _load_from_yaml(config_path, agent_name)
     elif config_path and not HAS_YAML:
         # Try JSON fallback
-        return _load_from_json(config_path, agent_name)
+        config = _load_from_json(config_path, agent_name)
     else:
-        return _from_env(agent_name)
+        config = _from_env(agent_name)
+
+    # Validate before returning — raise on invalid configs
+    errors = config.validate()
+    if errors:
+        raise ValueError(
+            "Invalid AHP configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+    return config
 
 
 def _find_config(explicit_path: Optional[str] = None) -> Optional[str]:
@@ -144,7 +157,19 @@ def _load_from_json(path: str, agent_name: str) -> AHPConfig:
 def _from_env(agent_name: str) -> AHPConfig:
     """Build config from environment variables."""
     config = AHPConfig(agent_name=agent_name, config_source="env")
-    config.level = int(os.environ.get("AHP_LEVEL", "1"))
+
+    # Parse AHP_LEVEL with validation — default to 1 on bad input
+    raw_level = os.environ.get("AHP_LEVEL", "1")
+    try:
+        config.level = int(raw_level)
+    except ValueError:
+        warnings.warn(
+            f"AHP_LEVEL={raw_level!r} is not a valid integer, defaulting to 1",
+            stacklevel=2,
+        )
+        logger.warning("AHP_LEVEL=%r is not a valid integer, defaulting to 1", raw_level)
+        config.level = 1
+
     config.inference_record = os.environ.get("AHP_INFERENCE_RECORD", "true").lower() == "true"
     config.evidence_record = os.environ.get("AHP_EVIDENCE_RECORD", "true").lower() == "true"
     config.authorization_record = os.environ.get("AHP_AUTH_RECORD", "false").lower() == "true"

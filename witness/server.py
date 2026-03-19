@@ -6,20 +6,30 @@ Storage: JSON file (for simplicity, not SQLite).
 from __future__ import annotations
 import hashlib
 import json
+import logging
 import os
+import tempfile
+import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Optional
 
+logger = logging.getLogger(__name__)
+
 # Generate witness identity on startup
 try:
-    from ahp.core.signing import generate_keypair, sign
+    from ahp.core.signing import generate_keypair, sign, verify_signature
     witness_keys = generate_keypair()
-except Exception:
+    _has_crypto = True
+except ImportError:
     witness_keys = None
+    _has_crypto = False
+    logger.warning("Crypto not available — witness will not verify client signatures")
 
 WITNESS_ID = "ahp-reference-witness"
 RECEIPTS_FILE = "witness_receipts.json"
+MAX_REQUEST_SIZE = 1_048_576  # 1 MB
+_receipts_lock = threading.Lock()
 
 
 def _load_receipts() -> Dict:
@@ -30,49 +40,143 @@ def _load_receipts() -> Dict:
 
 
 def _save_receipts(data: Dict) -> None:
-    with open(RECEIPTS_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    """Atomic write: write to temp file then rename to prevent corruption."""
+    dir_name = os.path.dirname(os.path.abspath(RECEIPTS_FILE))
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, RECEIPTS_FILE)
+    except Exception:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _find_existing_receipt(data: Dict, agent_id: str, sequence) -> Optional[Dict]:
+    """Check for duplicate (agent_id, sequence) receipt."""
+    for r in data['receipts']:
+        if r.get('agent_id') == agent_id and r.get('sequence') == sequence:
+            return r
+    return None
+
+
+def _verify_client_signature(body: dict) -> bool:
+    """Verify the Ed25519 signature over checkpoint data if crypto is available.
+
+    Returns True if signature is valid or if crypto is unavailable (graceful degradation).
+    The request body must include 'public_key' (hex-encoded Ed25519 public key) for
+    verification. 'signing_key_id' is a hash of the key and cannot be used for verification.
+    """
+    signature_hex = body.get('signature')
+    public_key_hex = body.get('public_key')
+
+    if not signature_hex:
+        # No signature provided — allow for backwards compatibility
+        return True
+
+    if not public_key_hex:
+        logger.warning(
+            "Checkpoint has signature but no public_key field. "
+            "Cannot verify without the actual public key. Accepting without verification."
+        )
+        return True
+
+    if not _has_crypto:
+        logger.warning(
+            "Signature verification unavailable (no crypto support). "
+            "Accepting checkpoint without verification."
+        )
+        return True
+
+    try:
+        # Reconstruct the signed data (canonical checkpoint fields)
+        sign_data = json.dumps({
+            'agent_id': body.get('agent_id'),
+            'chain_hash': body.get('chain_hash'),
+            'sequence': body.get('sequence'),
+            'timestamp_ms': body.get('timestamp_ms'),
+        }, sort_keys=True).encode()
+
+        signature = bytes.fromhex(signature_hex)
+        public_key = bytes.fromhex(public_key_hex)
+        verify_signature(sign_data, signature, public_key)
+        return True
+    except Exception as e:
+        logger.warning("Signature verification failed: %s", e)
+        return False
 
 
 class WitnessHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/ahp/v1/checkpoints':
+            # Check request size limit
             content_length = int(self.headers.get('Content-Length', 0))
-            body = json.loads(self.rfile.read(content_length))
+            if content_length > MAX_REQUEST_SIZE:
+                self.send_error(413, "Request body too large")
+                return
 
-            receipt_id = os.urandom(16).hex()
-            witness_timestamp = int(time.time() * 1000)
+            try:
+                body = json.loads(self.rfile.read(content_length))
+            except (json.JSONDecodeError, ValueError):
+                self.send_error(400, "Invalid JSON")
+                return
 
-            # Sign the checkpoint + witness timestamp
-            sign_data = json.dumps({
-                'agent_id': body.get('agent_id'),
-                'chain_hash': body.get('chain_hash'),
-                'sequence': body.get('sequence'),
-                'witness_timestamp': witness_timestamp,
-            }, sort_keys=True).encode()
+            # Verify client signature if provided
+            if not _verify_client_signature(body):
+                self.send_error(403, "Invalid signature")
+                return
 
-            if witness_keys:
-                witness_sig = sign(sign_data, witness_keys.private_key_bytes).hex()
-                witness_pub = witness_keys.public_key_bytes.hex()
-            else:
-                witness_sig = '00' * 64
-                witness_pub = '00' * 32
+            with _receipts_lock:
+                # Check for duplicate (agent_id, sequence) — return existing receipt
+                data = _load_receipts()
+                agent_id = body.get('agent_id')
+                sequence = body.get('sequence')
+                existing = _find_existing_receipt(data, agent_id, sequence)
+                if existing is not None:
+                    response = json.dumps(existing).encode()
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(response)))
+                    self.end_headers()
+                    self.wfile.write(response)
+                    return
 
-            receipt = {
-                'receipt_id': receipt_id,
-                'witness_id': WITNESS_ID,
-                'witness_timestamp': witness_timestamp,
-                'witness_signature': witness_sig,
-                'witness_public_key': witness_pub,
-                'agent_id': body.get('agent_id'),
-                'chain_hash': body.get('chain_hash'),
-                'sequence': body.get('sequence'),
-                'timestamp_ms': body.get('timestamp_ms'),
-            }
+                receipt_id = os.urandom(16).hex()
+                witness_timestamp = int(time.time() * 1000)
 
-            data = _load_receipts()
-            data['receipts'].append(receipt)
-            _save_receipts(data)
+                # Sign the checkpoint + witness timestamp
+                sign_data = json.dumps({
+                    'agent_id': agent_id,
+                    'chain_hash': body.get('chain_hash'),
+                    'sequence': sequence,
+                    'witness_timestamp': witness_timestamp,
+                }, sort_keys=True).encode()
+
+                if witness_keys:
+                    witness_sig = sign(sign_data, witness_keys.private_key_bytes).hex()
+                    witness_pub = witness_keys.public_key_bytes.hex()
+                else:
+                    witness_sig = '00' * 64
+                    witness_pub = '00' * 32
+
+                receipt = {
+                    'receipt_id': receipt_id,
+                    'witness_id': WITNESS_ID,
+                    'witness_timestamp': witness_timestamp,
+                    'witness_signature': witness_sig,
+                    'witness_public_key': witness_pub,
+                    'agent_id': agent_id,
+                    'chain_hash': body.get('chain_hash'),
+                    'sequence': sequence,
+                    'timestamp_ms': body.get('timestamp_ms'),
+                }
+
+                data['receipts'].append(receipt)
+                _save_receipts(data)
 
             response = json.dumps(receipt).encode()
             self.send_response(200)
@@ -84,7 +188,14 @@ class WitnessHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_GET(self):
-        if self.path == '/ahp/v1/identity':
+        if self.path == '/health':
+            response = json.dumps({"status": "ok"}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+        elif self.path == '/ahp/v1/identity':
             identity = {
                 'witness_id': WITNESS_ID,
                 'public_key': witness_keys.public_key_bytes.hex() if witness_keys else '00' * 32,
@@ -123,7 +234,7 @@ class WitnessHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def log_message(self, format, *args):
-        print("[witness] %s" % (args[0],))
+        print("[witness] " + (format % args))
 
 
 def main(port: int = 8120):
@@ -136,6 +247,7 @@ def main(port: int = 8120):
     print("  POST /ahp/v1/checkpoints")
     print("  GET  /ahp/v1/receipts/{id}")
     print("  GET  /ahp/v1/identity")
+    print("  GET  /health")
     print()
     try:
         server.serve_forever()

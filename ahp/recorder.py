@@ -21,36 +21,24 @@ Usage:
 """
 from __future__ import annotations
 
-import hashlib
 import logging
-import platform
-import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Union
 
-from ahp.config import AHPConfig, FilterConfig, WitnessConfig, load_config
+from ahp._base_recorder import RecorderBase
+from ahp.config import AHPConfig, load_config
 from ahp.core.chain import ChainWriter, ChainReader
-from ahp.core.evidence import EvidenceStore
-from ahp.core.filters import Filter, FilterPipeline
+from ahp.core.filters import Filter
 from ahp.core.records import (
     Record,
     ActionPayload,
-    BootPayload,
-    CheckpointPayload,
-    GapPayload,
-    KeyPayload,
-    WitnessPayload,
     Authorization,
+    WitnessPayload,
 )
-from ahp.core.signing import (
-    KeyPair,
-    generate_keypair,
-    sign,
-    verify_signature,
-    compute_merkle_root,
-)
+from ahp.core.signing import KeyPair, sign
 from ahp.core.types import (
     RecordType,
     ResultStatus,
@@ -58,35 +46,27 @@ from ahp.core.types import (
     ActionType,
     AuthorizationType,
     GapReason,
-    ChainLevel,
-    FsyncMode,
-    ZERO_HASH_16,
     ZERO_HASH_32,
     ZERO_UUID,
 )
-from ahp.core.uuid7 import uuid7
 from ahp.core.witness_client import send_checkpoint as _send_checkpoint
+from ahp.core.recovery import recover_chain
+from ahp.core.rotation import ChainRotator, DEFAULT_MAX_SEGMENT_BYTES
 
 logger = logging.getLogger("ahp.recorder")
 
-# SDK identity constants
-_SDK_NAME = "ahp-python"
-_SDK_VERSION = "0.1.0"
 
-# Map string fsync modes from config to enum values
-_FSYNC_MAP = {
-    "every": FsyncMode.EVERY,
-    "batch": FsyncMode.BATCH,
-    "none": FsyncMode.NONE,
-}
-
-
-class AHPRecorder:
+class AHPRecorder(RecorderBase):
     """Main SDK entry point -- wires all AHP components together.
 
     Fail-open by design: recording failures NEVER propagate to the host agent.
     All public methods that write records catch exceptions internally when used
     via :meth:`safe_record`.
+
+    Lock hierarchy (acquire in this order to prevent deadlocks):
+      1. self._recorder_lock (RLock) — protects counters and checkpoint logic
+      2. self._chain._lock (Lock) — protects chain file I/O
+    Never acquire _recorder_lock while holding _chain._lock.
     """
 
     # ------------------------------------------------------------------
@@ -107,92 +87,74 @@ class AHPRecorder:
         custom_filters: Optional[List[Filter]] = None,
         agent_framework: str = "",
         interceptors: Optional[List[str]] = None,
+        on_record_written: Optional[Callable[[Record], None]] = None,
+        on_error: Optional[Callable[[Exception, str], None]] = None,
     ) -> None:
-        # ---- resolve config ------------------------------------------------
-        if config is not None:
-            self._cfg = config
-        else:
-            self._cfg = AHPConfig(
-                level=level,
-                agent_name=agent_name,
-                agent_framework=agent_framework,
-                checkpoint_interval=checkpoint_interval,
-                witness=WitnessConfig(
-                    enabled=(level == 3),
-                    interval=witness_interval,
-                    endpoints=witness_endpoints or [],
-                ),
-                filter_presets=filter_presets or [],
-            )
+        # ---- shared initialization (config, filters, evidence, signing) ----
+        self._init_shared_components(
+            agent_name=agent_name,
+            level=level,
+            config=config,
+            evidence_path=evidence_path,
+            filter_presets=filter_presets,
+            custom_filters=custom_filters,
+            agent_framework=agent_framework,
+            interceptors=interceptors,
+            checkpoint_interval=checkpoint_interval,
+            witness_interval=witness_interval,
+            witness_endpoints=witness_endpoints,
+            on_record_written=on_record_written,
+            on_error=on_error,
+        )
 
-        # Override agent_name from explicit arg (takes precedence over config)
-        self._agent_name = agent_name
-        self._level = self._cfg.level
-        self._checkpoint_interval = self._cfg.checkpoint_interval
-        self._witness_interval = self._cfg.witness.interval
-        self._witness_endpoints = list(self._cfg.witness.endpoints)
-        self._agent_framework = self._cfg.agent_framework or agent_framework
-        self._interceptors = interceptors or []
-
-        # ---- chain writer ---------------------------------------------------
+        # ---- chain writer (with recovery + rotation) -----------------------
         if chain_path is None:
             chain_path = str(
                 Path(tempfile.gettempdir()) / ("ahp_" + agent_name + ".ahp")
             )
+        self._chain_path = chain_path
+
+        # Recovery: if chain file already exists, scan and truncate corrupt tail
+        self._recovery_result = None
+        if Path(chain_path).exists():
+            try:
+                self._recovery_result = recover_chain(chain_path)
+                if self._recovery_result.records_truncated > 0:
+                    self._log_warning(
+                        "Recovered chain %s: %d verified, %d truncated",
+                        chain_path,
+                        self._recovery_result.records_verified,
+                        self._recovery_result.records_truncated,
+                    )
+            except Exception as exc:
+                self._log_warning(
+                    "Chain recovery failed for %s", chain_path, exc_info=True
+                )
+                self._fire_error_callback(exc, "chain_recovery")
+
         self._chain = ChainWriter(chain_path)
 
-        # ---- evidence store -------------------------------------------------
-        self._evidence_enabled = self._cfg.evidence_record
-        self._evidence = None  # type: Optional[EvidenceStore]
-        if self._evidence_enabled:
-            epath = evidence_path or str(
-                Path(chain_path).parent / "evidence"
-            )
-            self._evidence = EvidenceStore(epath)
+        # Rotation support: track segment size limit
+        self._max_segment_bytes = DEFAULT_MAX_SEGMENT_BYTES  # 64MB
 
-        # ---- PII filter pipeline --------------------------------------------
-        preset_list = list(self._cfg.filter_presets)
-        if filter_presets:
-            for p in filter_presets:
-                if p not in preset_list:
-                    preset_list.append(p)
+        # Update evidence path if not explicitly set
+        if self._evidence_enabled and self._evidence is not None:
+            if evidence_path is None:
+                epath = str(Path(chain_path).parent / "evidence")
+                from ahp.core.evidence import EvidenceStore
+                self._evidence = EvidenceStore(epath)
 
-        custom_filter_list = list(custom_filters or [])
-        # Also include filters defined in config
-        for fc in self._cfg.filters:
-            custom_filter_list.append(
-                Filter(
-                    name=fc.name,
-                    pattern=fc.pattern,
-                    replacement=fc.replacement,
-                    scope=list(fc.scope),
-                )
-            )
-        self._filters = FilterPipeline(
-            filters=custom_filter_list if custom_filter_list else None,
-            presets=preset_list if preset_list else None,
-        )
-
-        # ---- signing (level >= 2) ------------------------------------------
-        self._keypair = None  # type: Optional[KeyPair]
-        if self._level >= 2:
-            self._keypair = generate_keypair()
-
-        # ---- internal counters ----------------------------------------------
-        self._records_since_checkpoint = 0  # type: int
-        self._record_hashes_since_checkpoint = []  # type: List[bytes]
-        self._records_since_witness = 0  # type: int
-
-        # ---- fail-open gap state -------------------------------------------
-        self._pending_gap = False
-        self._gap_reason = ""  # type: str
-        self._gap_detail = ""  # type: str
-        self._gap_first_lost_seq = 0  # type: int
+        # ---- concurrency lock for counters -----------------------------------
+        self._recorder_lock = threading.RLock()
 
         # ---- emit genesis records ------------------------------------------
         self._emit_boot_record()
         if self._level >= 2 and self._keypair is not None:
             self._emit_key_genesis_record()
+
+        # ---- emit recovery + gap records if recovery found corrupt data ----
+        if self._recovery_result is not None and self._recovery_result.records_truncated > 0:
+            self._emit_recovery_records(self._recovery_result)
 
     # ------------------------------------------------------------------
     # Class-method constructors
@@ -244,66 +206,61 @@ class AHPRecorder:
 
         Returns the :class:`Record` written to the chain.
         """
-        # 0. If there is a pending gap from a previous failure, emit it first.
-        self._flush_pending_gap()
+        with self._recorder_lock:
+            # 0. If there is a pending gap from a previous failure, emit it first.
+            self._flush_pending_gap()
 
-        # 1. Apply PII filters
-        param_hash, filtered_params, param_redacted = self._filters.hash_payload(
-            parameters, scope="parameters"
-        )
-        result_hash, filtered_result, result_redacted = self._filters.hash_payload(
-            result, scope="results"
-        )
-        redacted = param_redacted or result_redacted
+            # 1. Apply PII filters (shared logic from base)
+            param_hash, result_hash, filtered_params, filtered_result, redacted = (
+                self._filter_action_payloads(parameters, result)
+            )
 
-        # 2. Store evidence if configured
-        evidence_uri = ""
-        if self._evidence is not None and (filtered_params or filtered_result):
-            # Store both parameters and result as evidence
-            if filtered_params:
-                self._evidence.store(filtered_params)
-            if filtered_result:
-                self._evidence.store(filtered_result)
-            evidence_uri = "evidence://" + param_hash.hex()
+            # 2. Store evidence if configured (shared logic from base)
+            evidence_uri = self._store_evidence(
+                filtered_params, filtered_result, param_hash
+            )
 
-        # 3. Build payload
-        payload = ActionPayload(
-            parent_action_id=parent_action_id,
-            tool_name=tool_name,
-            parameters_hash=param_hash,
-            result_hash=result_hash,
-            result_status=result_status,
-            response_time_ms=response_time_ms,
-            protocol=protocol,
-            action_type=action_type,
-            target_entity=target_entity,
-            evidence_uri=evidence_uri,
-            redacted=redacted,
-            model_id=model_id,
-            input_token_count=input_token_count,
-            output_token_count=output_token_count,
-            authorization=authorization or Authorization(type=AuthorizationType.AUTH_NONE),
-        )
+            # 3. Build payload
+            payload = ActionPayload(
+                parent_action_id=parent_action_id,
+                tool_name=tool_name,
+                parameters_hash=param_hash,
+                result_hash=result_hash,
+                result_status=result_status,
+                response_time_ms=response_time_ms,
+                protocol=protocol,
+                action_type=action_type,
+                target_entity=target_entity,
+                evidence_uri=evidence_uri,
+                redacted=redacted,
+                model_id=model_id,
+                input_token_count=input_token_count,
+                output_token_count=output_token_count,
+                authorization=authorization or Authorization(type=AuthorizationType.AUTH_NONE),
+            )
 
-        # 4. Write to chain (thread-safe via ChainWriter lock)
-        record = self._chain.write_record(payload)
+            # 4. Write to chain (thread-safe via ChainWriter lock)
+            record = self._chain.write_record(payload)
 
-        # 5. Track checkpoint state
-        self._track_record(record)
+            # 5. Track checkpoint state (shared logic from base)
+            self._track_record(record)
 
-        # 6. Auto-checkpoint
-        if self._records_since_checkpoint >= self._checkpoint_interval:
-            self.emit_checkpoint()
+            # 6. Auto-checkpoint
+            if self._records_since_checkpoint >= self._checkpoint_interval:
+                self.emit_checkpoint()
 
-        # 7. Auto-witness (level 3 only)
-        if (
-            self._level >= 3
-            and self._witness_endpoints
-            and self._records_since_witness >= self._witness_interval
-        ):
-            self.send_witness_checkpoint()
+            # 7. Auto-witness (level 3 only)
+            if (
+                self._level >= 3
+                and self._witness_endpoints
+                and self._records_since_witness >= self._witness_interval
+            ):
+                self.send_witness_checkpoint()
 
-        return record
+            # 8. Auto-rotate if chain exceeds 64MB
+            self._check_rotation()
+
+            return record
 
     def record_inference(
         self,
@@ -352,34 +309,16 @@ class AHPRecorder:
         signs it when ``level >= 2``, and writes a
         :class:`CheckpointPayload` to the chain.
         """
-        merkle_root = compute_merkle_root(self._record_hashes_since_checkpoint)
-
-        signature = b"\x00" * 64
-        signing_key_id = ZERO_HASH_32
-        if self._level >= 2 and self._keypair is not None:
-            signature = sign(merkle_root, self._keypair.private_key_bytes)
-            signing_key_id = self._keypair.key_id
-
-        evidence_status = self._get_evidence_status()
-
-        payload = CheckpointPayload(
-            record_count=self._chain.record_count + 1,  # including this checkpoint
+        payload = self._build_checkpoint_payload(
+            record_count=self._chain.record_count + 1,
             gap_count=self._chain.gap_count,
             chain_hash=self._chain.prev_hash,
-            merkle_root=merkle_root,
-            signature=signature,
-            signing_key_id=signing_key_id,
-            evidence_available=evidence_status.get("available", 0),
-            evidence_exported=evidence_status.get("exported", 0),
-            evidence_expired=evidence_status.get("expired", 0),
-            evidence_missing=evidence_status.get("missing", 0),
         )
 
         record = self._chain.write_record(payload)
 
-        # Reset counters
-        self._records_since_checkpoint = 0
-        self._record_hashes_since_checkpoint = []
+        # Reset counters (shared logic from base)
+        self._reset_checkpoint_counters()
 
         return record
 
@@ -432,13 +371,13 @@ class AHPRecorder:
                         ),
                     )
                     self._chain.write_record(witness_payload)
-            except Exception:
-                # Per spec Section 8.5: log, do not block the agent.
-                logger.warning(
+            except Exception as exc:
+                self._log_warning(
                     "Witness checkpoint to %s failed", endpoint, exc_info=True
                 )
+                self._fire_error_callback(exc, "witness_checkpoint")
 
-        self._records_since_witness = 0
+        self._reset_witness_counter()
 
     # ------------------------------------------------------------------
     # Fail-open wrapper
@@ -460,8 +399,23 @@ class AHPRecorder:
             self._pending_gap = True
             self._gap_reason = "INTERCEPTOR_FAILURE"
             self._gap_detail = str(exc)
-            logger.warning("AHP safe_record failed (will emit GapRecord): %s", exc)
+            self._log_warning("AHP safe_record failed (will emit GapRecord): %s", exc)
+            self._fire_error_callback(exc, "safe_record")
             return None
+
+    # ------------------------------------------------------------------
+    # Resource management
+    # ------------------------------------------------------------------
+
+    def close(self) -> None:
+        """Release resources held by the recorder (chain writer, file locks)."""
+        self._chain.close()
+
+    def __enter__(self) -> "AHPRecorder":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
 
     # ------------------------------------------------------------------
     # Read-only accessors
@@ -477,94 +431,35 @@ class AHPRecorder:
         """Underlying :class:`ChainWriter` (read-only access)."""
         return self._chain
 
-    @property
-    def level(self) -> int:
-        return self._level
-
-    @property
-    def keypair(self) -> Optional[KeyPair]:
-        return self._keypair
-
-    @property
-    def evidence_store(self) -> Optional[EvidenceStore]:
-        return self._evidence
-
-    @property
-    def filter_pipeline(self) -> FilterPipeline:
-        return self._filters
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _emit_boot_record(self) -> None:
         """Write the BootRecord as the very first record in the chain."""
-        runtime_info = "python %s / %s" % (
-            platform.python_version(),
-            platform.system(),
-        )
-
-        fsync_mode = _FSYNC_MAP.get(self._cfg.fsync_mode, FsyncMode.BATCH)
-
-        payload = BootPayload(
-            sdk_name=_SDK_NAME,
-            sdk_version=_SDK_VERSION,
-            interceptors=self._interceptors,
-            agent_framework=self._agent_framework,
-            agent_name=self._agent_name,
-            runtime=runtime_info,
-            chain_level=ChainLevel(self._level),
-            fsync_mode=fsync_mode,
-            clock_source="system",
-            inference_recording=self._cfg.inference_record,
-            inference_evidence=self._cfg.inference_evidence,
-            evidence_recording=self._cfg.evidence_record,
-            filter_config_hash=self._filters.config_hash(),
-            matched_agent_rule=self._cfg.matched_agent_rule,
-            config_source=self._cfg.config_source,
-            authorization_recording=self._cfg.authorization_record,
-        )
-
+        payload = self._build_boot_payload()
         record = self._chain.write_record(payload)
         self._track_record(record)
 
     def _emit_key_genesis_record(self) -> None:
         """Write a KeyGenesisRecord (level >= 2)."""
-        if self._keypair is None:
+        payload = self._build_key_genesis_payload()
+        if payload is None:
             return
-
-        payload = KeyPayload(
-            public_key=self._keypair.public_key_bytes,
-            key_id=self._keypair.key_id,
-            expires_at=0,  # no expiry for session keys
-            supersedes_key_id=ZERO_HASH_32,
-        )
-
         record = self._chain.write_record(payload)
         self._track_record(record)
 
-    def _track_record(self, record: Record) -> None:
-        """Update internal counters after a record is written."""
-        self._records_since_checkpoint += 1
-        self._records_since_witness += 1
-
-        # Keep the SHA-256 of the canonical bytes for Merkle tree
-        if record._stored_bytes is not None:
-            self._record_hashes_since_checkpoint.append(
-                hashlib.sha256(record._stored_bytes).digest()
-            )
-
     def _flush_pending_gap(self) -> None:
-        """If a previous safe_record failed, emit a GapRecord now."""
+        """If a previous safe_record failed, emit a GapRecord now.
+
+        Called from record_action() which already holds _recorder_lock.
+        """
         if not self._pending_gap:
             return
 
         first_lost = self._gap_first_lost_seq
-        last_lost = self._chain.sequence  # current tip; gap covers up to here
+        last_lost = self._chain.sequence
 
-        # If first_lost > last_lost it means no sequence numbers were actually
-        # skipped (the failure happened before any sequence was consumed).
-        # Emit a single-record gap documenting the failure anyway.
         if first_lost > last_lost:
             last_lost = first_lost
 
@@ -582,14 +477,64 @@ class AHPRecorder:
         self._gap_detail = ""
         self._gap_first_lost_seq = 0
 
-    def _get_evidence_status(self) -> Dict[str, int]:
-        """Return evidence status counts for checkpoint payload."""
-        if self._evidence is not None:
-            counts = self._evidence.count()
-            return {
-                "available": counts.get("available", 0),
-                "exported": 0,
-                "expired": 0,
-                "missing": counts.get("missing", 0),
-            }
-        return {"available": 0, "exported": 0, "expired": 0, "missing": 0}
+    def _emit_recovery_records(self, recovery_result) -> None:
+        """Emit RecoveryRecord + GapRecord after crash recovery (per spec Section 3.6)."""
+        from ahp.core.types import RecoveryMethod
+
+        recovery_record = self._chain.write_recovery(
+            records_verified=recovery_result.records_verified,
+            records_truncated=recovery_result.records_truncated,
+            last_valid_seq=recovery_result.last_valid_seq,
+            method=RecoveryMethod.CHAIN_SCAN,
+            detail="Automatic crash recovery on startup",
+        )
+        self._track_record(recovery_record)
+
+        if recovery_result.records_truncated > 0:
+            first_lost = recovery_result.last_valid_seq + 1
+            last_lost = first_lost + recovery_result.records_truncated - 1
+            gap_record = self._chain.write_gap(
+                first_lost=first_lost,
+                last_lost=last_lost,
+                reason=GapReason.CRASH,
+                detail="Records lost during crash recovery",
+            )
+            self._track_record(gap_record)
+
+    def _check_rotation(self) -> None:
+        """Rotate the chain file if it exceeds 64MB."""
+        try:
+            chain_size = Path(self._chain_path).stat().st_size
+        except OSError:
+            return
+
+        if chain_size < self._max_segment_bytes:
+            return
+
+        logger.info(
+            "Chain file %s reached %d bytes, rotating",
+            self._chain_path, chain_size,
+        )
+
+        prev_hash = self._chain._prev_hash
+        prev_sequence = self._chain._sequence
+
+        self._chain.close()
+
+        import os as _os
+        timestamp = int(time.time())
+        segment_path = self._chain_path + f".{timestamp}.segment"
+        try:
+            _os.rename(self._chain_path, segment_path)
+        except OSError:
+            self._log_warning("Failed to rename chain for rotation", exc_info=True)
+
+        self._chain = ChainWriter(
+            self._chain_path,
+            prev_hash=prev_hash,
+            start_sequence=prev_sequence,
+        )
+
+        self._emit_boot_record()
+        if self._level >= 2 and self._keypair is not None:
+            self._emit_key_genesis_record()

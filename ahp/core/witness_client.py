@@ -11,6 +11,8 @@ def send_checkpoint(endpoint: str, agent_id: str, chain_hash: str,
                     sequence: int, timestamp_ms: int,
                     signature: str = "", signing_key_id: str = "") -> Optional[Dict]:
     """Send a checkpoint to a witness server. Returns receipt or None on failure."""
+    if not endpoint.startswith("https://") and not endpoint.startswith("http://localhost") and not endpoint.startswith("http://127.0.0.1"):
+        raise ValueError(f"Witness endpoint must use HTTPS: {endpoint}")
     url = endpoint.rstrip('/') + '/ahp/v1/checkpoints'
     payload = json.dumps({
         'agent_id': agent_id,
@@ -39,6 +41,8 @@ def send_checkpoint(endpoint: str, agent_id: str, chain_hash: str,
 
 def get_identity(endpoint: str) -> Optional[Dict]:
     """Get witness identity (public key)."""
+    if not endpoint.startswith("https://") and not endpoint.startswith("http://localhost") and not endpoint.startswith("http://127.0.0.1"):
+        raise ValueError(f"Witness endpoint must use HTTPS: {endpoint}")
     url = endpoint.rstrip('/') + '/ahp/v1/identity'
     try:
         req = Request(url)
@@ -50,6 +54,8 @@ def get_identity(endpoint: str) -> Optional[Dict]:
 
 def get_receipts_for_agent(endpoint: str, agent_id: str) -> List[Dict]:
     """Get all receipts for an agent from a witness."""
+    if not endpoint.startswith("https://") and not endpoint.startswith("http://localhost") and not endpoint.startswith("http://127.0.0.1"):
+        raise ValueError(f"Witness endpoint must use HTTPS: {endpoint}")
     url = endpoint.rstrip('/') + '/ahp/v1/agents/%s/checkpoints' % agent_id
     try:
         req = Request(url)

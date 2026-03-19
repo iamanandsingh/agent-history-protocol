@@ -22,6 +22,7 @@ from ahp.core.records import (
 )
 from ahp.core.canonical import canonical_bytes
 from ahp.core.uuid7 import uuid7
+from ahp.core.validation import validate_record, MAX_RECORD_SIZE
 
 # File format constants
 MAGIC = b'AHP\x00'
@@ -34,12 +35,14 @@ class ChainWriter:
 
     def __init__(self, path: Union[str, Path], agent_id: Optional[bytes] = None,
                  session_id: Optional[bytes] = None,
-                 fsync_mode: str = "batch"):
+                 fsync_mode: str = "batch",
+                 prev_hash: Optional[bytes] = None,
+                 start_sequence: int = 0):
         self.path = Path(path)
         self.agent_id = agent_id or uuid7()
         self.session_id = session_id or uuid7()
-        self._sequence = 0
-        self._prev_hash = ZERO_HASH_32
+        self._sequence = start_sequence
+        self._prev_hash = prev_hash if prev_hash is not None else ZERO_HASH_32
         self._record_count = 0
         self._gap_count = 0
         self._fsync_mode = fsync_mode  # "every", "batch", "none"
@@ -47,15 +50,19 @@ class ChainWriter:
         self._lock = threading.Lock()
 
         self._lock_file = None
+        self._data_file: Optional[object] = None  # must be set before _acquire_file_lock (for safe __del__)
+        self._lock_path = str(self.path) + '.lock'
         self._acquire_file_lock()
 
         if not self.path.exists():
             self._write_header()
 
+        # Open persistent handle for appending
+        self._data_file = open(self.path, 'ab')
+
     def _acquire_file_lock(self) -> None:
         """Acquire exclusive file lock to prevent multi-process corruption."""
-        lock_path = str(self.path) + '.lock'
-        self._lock_file = open(lock_path, 'w')
+        self._lock_file = open(self._lock_path, 'w')
         try:
             import fcntl
             fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -70,7 +77,16 @@ class ChainWriter:
             )
 
     def close(self) -> None:
-        """Release file lock and clean up."""
+        """Release persistent file handle, file lock, and clean up."""
+        # Close persistent data file handle
+        if self._data_file is not None:
+            try:
+                self._data_file.flush()
+                self._data_file.close()
+            except OSError:
+                pass
+            self._data_file = None
+
         if self._lock_file:
             try:
                 import fcntl
@@ -79,6 +95,11 @@ class ChainWriter:
                 pass
             try:
                 self._lock_file.close()
+            except OSError:
+                pass
+            # Clean up .lock file
+            try:
+                os.unlink(self._lock_path)
             except OSError:
                 pass
             self._lock_file = None
@@ -164,9 +185,43 @@ class ChainWriter:
             payload=payload,
         )
 
+        # Validate record before serialization (fail-open: emit GapRecord on error)
+        # Skip validation for replacement GapRecords to prevent infinite recursion
+        is_gap_replacement = isinstance(payload, GapPayload) and payload.detail.startswith("Validation failed:")
+        errors = [] if is_gap_replacement else validate_record(record)
+        if errors:
+            import logging
+            _logger = logging.getLogger("ahp.chain")
+            _logger.warning("Record validation failed (emitting GapRecord): %s", errors)
+            # Replace with a GapRecord instead of crashing
+            gap_payload = GapPayload(
+                first_lost_sequence=self._sequence,
+                last_lost_sequence=self._sequence,
+                count=1,
+                reason=GapReason.INTERCEPTOR_FAILURE,
+                detail="Validation failed: " + "; ".join(errors),
+            )
+            record = Record(
+                record_id=record.record_id,
+                agent_id=self.agent_id,
+                session_id=session_id or self.session_id,
+                timestamp_ms=record.timestamp_ms,
+                sequence=self._sequence,
+                prev_hash=self._prev_hash,
+                schema_version=SCHEMA_VERSION,
+                record_type=RecordType.GAP,
+                payload=gap_payload,
+            )
+
         # Serialize to canonical bytes
         stored = canonical_bytes(record)
         record._stored_bytes = stored
+
+        # Save old state for rollback on I/O failure
+        old_prev_hash = self._prev_hash
+        old_sequence = self._sequence
+        old_record_count = self._record_count
+        old_gap_count = self._gap_count
 
         # Update chain state
         self._prev_hash = hashlib.sha256(stored).digest()
@@ -175,7 +230,14 @@ class ChainWriter:
             self._gap_count += 1
 
         # Write to file: [length][canonical_bytes][crc32c]
-        with open(self.path, 'ab') as f:
+        # Uses persistent file handle to reduce open/close syscall overhead
+        try:
+            f = self._data_file
+            if f is None or f.closed:
+                # Reopen if handle was lost (shouldn't happen in normal flow)
+                self._data_file = open(self.path, 'ab')
+                f = self._data_file
+
             length = len(stored)
             f.write(struct.pack('<I', length))
             f.write(stored)
@@ -191,6 +253,13 @@ class ChainWriter:
                 os.fsync(f.fileno())
                 self._writes_since_fsync = 0
             # "none" — no fsync, OS decides
+        except OSError:
+            # Rollback in-memory state so the chain stays consistent
+            self._prev_hash = old_prev_hash
+            self._sequence = old_sequence
+            self._record_count = old_record_count
+            self._gap_count = old_gap_count
+            raise
 
         return record
 
@@ -230,6 +299,10 @@ class ChainReader:
                 if len(length_bytes) < 4:
                     break
                 length = struct.unpack('<I', length_bytes)[0]
+                if length > MAX_RECORD_SIZE:
+                    raise ValueError(
+                        f"Record length {length} exceeds maximum of 1MB"
+                    )
                 stored = f.read(length)
                 if len(stored) < length:
                     break

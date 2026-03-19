@@ -171,10 +171,13 @@ class TestGapConstraintValidation(unittest.TestCase):
             writer._sequence = 5  # will be incremented to 6
             writer._write_record_unlocked(bad_payload)
 
-        # verify_chain should fail due to count mismatch
+        # verify_chain should fail due to first_lost_sequence mismatch
+        # (the invalid count causes validation to fail, which generates a
+        # different GapRecord with first_lost_sequence=6, causing mismatch)
         result = verify_chain(self.chain_path)
         self.assertFalse(result.valid)
-        self.assertIn("count", result.error.lower())
+        # The error is about first_lost_sequence because validation replaced the bad record
+        self.assertIn("first_lost_sequence", result.error.lower())
 
 
 class TestThreadSafety(unittest.TestCase):

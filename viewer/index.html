@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AHP Chain Viewer</title>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --accent: #38bdf8;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --purple: #a78bfa;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+    min-height: 100vh;
+  }
+  .drop-zone {
+    border: 2px dashed #475569;
+    border-radius: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.05);
+  }
+  .record-row { transition: background 0.15s; }
+  .record-row:hover { background: rgba(56, 189, 248, 0.08); }
+
+  /* Resizable columns */
+  th.resizable { position: relative; overflow: hidden; text-overflow: ellipsis; }
+  th.resizable::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 25%; height: 50%; width: 4px;
+    cursor: col-resize;
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 2px;
+  }
+  th.resizable:hover::after { background: var(--accent); }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .badge-action { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+  .badge-gap { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+  .badge-checkpoint { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+  .badge-boot { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+  .badge-recovery { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  .badge-key { background: rgba(244, 114, 182, 0.15); color: #f472b6; }
+  .badge-witness { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
+  .stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .detail-panel {
+    background: var(--bg-secondary);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .chain-ok { color: var(--green); }
+  .chain-broken { color: var(--red); }
+  .hash-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.75rem; color: var(--text-secondary); }
+  .header-gradient {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-bottom: 1px solid #334155;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  th { position: sticky; top: 0; z-index: 10; background: #1e293b; }
+  .expand-btn {
+    width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px; cursor: pointer; transition: all 0.15s;
+    background: transparent; border: none; color: var(--text-secondary);
+  }
+  .expand-btn:hover { background: rgba(56, 189, 248, 0.15); color: var(--accent); }
+  .payload-detail { display: none; }
+  .payload-detail.open { display: table-row; }
+  .progress-bar { height: 4px; background: #334155; border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s; border-radius: 2px; }
+  .result-success { color: var(--green); }
+  .result-failure, .result-error { color: var(--red); }
+  .result-timeout { color: var(--yellow); }
+  .scroll-container { max-height: calc(100vh - 380px); overflow-y: auto; }
+  .scroll-container::-webkit-scrollbar { width: 8px; }
+  .scroll-container::-webkit-scrollbar-track { background: var(--bg-primary); }
+  .scroll-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+  .scroll-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+</style>
+</head>
+<body>
+
+<div class="header-gradient px-6 py-4">
+  <div class="max-w-screen-xl mx-auto flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="8" fill="#38bdf8" fill-opacity="0.15"/>
+        <path d="M8 22V10l8-4 8 4v12l-8 4-8-4z" stroke="#38bdf8" stroke-width="1.5" fill="none"/>
+        <circle cx="16" cy="14" r="3" stroke="#38bdf8" stroke-width="1.5"/>
+        <path d="M16 17v5" stroke="#38bdf8" stroke-width="1.5"/>
+      </svg>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight" style="color: var(--accent);">Agent History Protocol</h1>
+        <p class="text-xs" style="color: var(--text-secondary);">Chain File Viewer</p>
+      </div>
+    </div>
+    <div id="fileInfo" class="text-sm" style="color: var(--text-secondary); display: none;">
+      <span id="fileName"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Area -->
+<div id="uploadArea" class="max-w-screen-xl mx-auto px-6 py-16">
+  <div id="dropZone" class="drop-zone p-16 text-center">
+    <svg class="mx-auto mb-4" width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <path d="M24 4v28m0 0l-10-10m10 10l10-10" stroke="#475569" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 34v6a4 4 0 004 4h24a4 4 0 004-4v-6" stroke="#475569" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p class="text-lg font-medium mb-2">Drop a .ahp chain file here</p>
+    <p class="text-sm" style="color: var(--text-secondary);">or click to select a file</p>
+    <input type="file" id="fileInput" accept=".ahp" class="hidden">
+  </div>
+</div>
+
+<!-- Results Area -->
+<div id="resultsArea" class="max-w-screen-xl mx-auto px-6 pb-12" style="display: none;">
+
+  <!-- Stats Row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6" id="statsGrid"></div>
+
+  <!-- Chain Integrity Banner -->
+  <div id="integrityBanner" class="mb-6 rounded-xl p-4 flex items-center gap-3" style="display: none;"></div>
+
+  <!-- Record Type Breakdown -->
+  <div class="mb-6 flex flex-wrap gap-2" id="typeBreakdown"></div>
+
+  <!-- Records Table -->
+  <div class="detail-panel">
+    <div class="px-4 py-3 flex items-center justify-between" style="border-bottom: 1px solid #334155;">
+      <h2 class="font-semibold text-sm">Records</h2>
+      <div class="flex items-center gap-2">
+        <select id="typeFilter" class="text-xs rounded px-2 py-1" style="background: var(--bg-tertiary); border: 1px solid #475569; color: var(--text-primary);">
+          <option value="all">All Types</option>
+          <option value="1">ACTION</option>
+          <option value="2">GAP</option>
+          <option value="3">CHECKPOINT</option>
+          <option value="4">BOOT</option>
+          <option value="5">RECOVERY</option>
+          <option value="6">KEY</option>
+          <option value="7">WITNESS</option>
+        </select>
+        <button id="exportBtn" class="text-xs rounded px-3 py-1 font-medium" style="background: rgba(56,189,248,0.15); color: var(--accent); border: none; cursor: pointer;">
+          Export JSON
+        </button>
+      </div>
+    </div>
+    <div class="scroll-container">
+      <table>
+        <thead>
+          <tr class="text-left text-xs uppercase tracking-wider" style="color: var(--text-secondary);">
+            <th class="px-4 py-3 resizable" style="width: 32px;"></th>
+            <th class="px-4 py-3 resizable" style="width: 60px;">#</th>
+            <th class="px-4 py-3 resizable" style="width: 120px;">Type</th>
+            <th class="px-4 py-3 resizable" style="width: 180px;">Timestamp</th>
+            <th class="px-4 py-3 resizable">Details</th>
+            <th class="px-4 py-3 resizable" style="width: 120px;">Hash</th>
+          </tr>
+        </thead>
+        <tbody id="recordsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// AHP Chain File Parser — mirrors Python ChainReader exactly
+// ============================================================================
+
+const RECORD_TYPES = { 1: 'ACTION', 2: 'GAP', 3: 'CHECKPOINT', 4: 'BOOT', 5: 'RECOVERY', 6: 'KEY', 7: 'WITNESS' };
+const RESULT_STATUS = { 1: 'SUCCESS', 2: 'FAILURE', 3: 'TIMEOUT', 4: 'ERROR' };
+const PROTOCOL = { 1: 'MCP', 2: 'HTTP', 3: 'GRPC', 4: 'A2A', 5: 'SHELL', 6: 'CUSTOM' };
+const ACTION_TYPE = { 1: 'TOOL_CALL', 2: 'INFERENCE', 3: 'DELEGATION', 4: 'MESSAGE', 5: 'CUSTOM' };
+const GAP_REASON = { 1: 'CRASH', 2: 'DISK_FULL', 3: 'DISK_CORRUPT', 4: 'ROTATION', 5: 'INTERCEPTOR_FAILURE', 6: 'BACKPRESSURE', 7: 'MANUAL_PURGE' };
+const CHAIN_LEVEL = { 1: 'LEVEL_1', 2: 'LEVEL_2', 3: 'LEVEL_3' };
+const FSYNC_MODE = { 1: 'EVERY', 2: 'BATCH', 3: 'NONE' };
+const RECOVERY_METHOD = { 1: 'CHECKPOINT_FILE', 2: 'CHAIN_SCAN', 3: 'FRESH_START' };
+const AUTH_TYPE = { 1: 'AUTH_NONE', 2: 'AUTH_HUMAN', 3: 'AUTH_AGENT', 4: 'AUTH_POLICY', 5: 'AUTH_MULTI_PARTY' };
+const AUTHORIZER_TYPE = { 1: 'HUMAN', 2: 'AGENT', 3: 'POLICY_ENGINE' };
+const AUTH_DECISION = { 1: 'APPROVED', 2: 'REJECTED', 3: 'CONDITIONAL' };
+
+const MAGIC = new Uint8Array([0x41, 0x48, 0x50, 0x00]); // "AHP\0"
+const HEADER_SIZE = 16;
+const ZERO_HASH_32 = new Uint8Array(32);
+
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function bytesToUUID(bytes) {
+  const h = bytesToHex(bytes);
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
+}
+
+function readUint32LE(view, offset) {
+  return view.getUint32(offset, true);
+}
+
+function readUint64LE(view, offset) {
+  const lo = view.getUint32(offset, true);
+  const hi = view.getUint32(offset + 4, true);
+  return lo + hi * 0x100000000;
+}
+
+function readString(view, buf, offset) {
+  const len = readUint32LE(view, offset);
+  offset += 4;
+  const bytes = buf.slice(offset, offset + len);
+  const str = new TextDecoder().decode(bytes);
+  return [str, offset + len];
+}
+
+// CRC32C (Castagnoli) — used by zlib.crc32 in Python
+const CRC32_TABLE = new Uint32Array(256);
+(function() {
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    CRC32_TABLE[i] = c;
+  }
+})();
+
+function crc32(data) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc = CRC32_TABLE[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Parse the file header
+function parseHeader(buffer) {
+  if (buffer.byteLength < HEADER_SIZE) return null;
+  const bytes = new Uint8Array(buffer, 0, 4);
+  for (let i = 0; i < 4; i++) {
+    if (bytes[i] !== MAGIC[i]) return null;
+  }
+  const view = new DataView(buffer);
+  return {
+    version: readUint32LE(view, 4),
+    timestamp_ms: readUint64LE(view, 8),
+  };
+}
+
+// Iterate records from binary buffer, yields { storedBytes: Uint8Array }
+function* iterRecords(buffer) {
+  const totalLen = buffer.byteLength;
+  let offset = HEADER_SIZE;
+
+  while (offset + 4 <= totalLen) {
+    const view = new DataView(buffer);
+    const length = readUint32LE(view, offset);
+    if (length > 1048576) break; // MAX_RECORD_SIZE = 1MB
+
+    if (offset + 4 + length + 4 > totalLen) break;
+
+    const storedBytes = new Uint8Array(buffer, offset + 4, length);
+    const expectedCrc = readUint32LE(view, offset + 4 + length);
+
+    // CRC is computed over [4B length] + [stored bytes]
+    const crcInput = new Uint8Array(4 + length);
+    crcInput[0] = length & 0xFF;
+    crcInput[1] = (length >> 8) & 0xFF;
+    crcInput[2] = (length >> 16) & 0xFF;
+    crcInput[3] = (length >> 24) & 0xFF;
+    crcInput.set(storedBytes, 4);
+    const actualCrc = crc32(crcInput);
+
+    if (actualCrc !== expectedCrc) break;
+
+    // Make a copy since storedBytes is a view into the buffer
+    yield { storedBytes: new Uint8Array(storedBytes) };
+
+    offset += 4 + length + 4;
+  }
+}
+
+// Parse envelope from stored bytes
+function parseEnvelope(stored) {
+  const view = new DataView(stored.buffer, stored.byteOffset, stored.byteLength);
+  let off = 0;
+
+  const record_id = stored.slice(off, off + 16); off += 16;
+  const agent_id = stored.slice(off, off + 16); off += 16;
+  const session_id = stored.slice(off, off + 16); off += 16;
+  const timestamp_ms = readUint64LE(view, off); off += 8;
+  const sequence = readUint64LE(view, off); off += 8;
+  const prev_hash = stored.slice(off, off + 32); off += 32;
+  const schema_version = readUint32LE(view, off); off += 4;
+  const record_type = readUint32LE(view, off); off += 4;
+
+  // Skip payload type discriminator
+  off += 4;
+
+  return {
+    record_id, agent_id, session_id,
+    timestamp_ms, sequence, prev_hash,
+    schema_version, record_type,
+    payload_bytes: stored.slice(off),
+    stored_bytes: stored,
+  };
+}
+
+// Parse ACTION payload
+function parseActionPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+
+  const parent_action_id = pb.slice(off, off + 16); off += 16;
+  let tool_name; [tool_name, off] = readString(view, pb, off);
+  const parameters_hash = pb.slice(off, off + 16); off += 16;
+  const result_hash = pb.slice(off, off + 16); off += 16;
+  const result_status = readUint32LE(view, off); off += 4;
+  const response_time_ms = readUint32LE(view, off); off += 4;
+  const protocol = readUint32LE(view, off); off += 4;
+  const action_type = readUint32LE(view, off); off += 4;
+  let target_entity; [target_entity, off] = readString(view, pb, off);
+  let evidence_uri; [evidence_uri, off] = readString(view, pb, off);
+  const redacted = pb[off] === 0x01; off += 1;
+  let model_id; [model_id, off] = readString(view, pb, off);
+  const input_token_count = readUint32LE(view, off); off += 4;
+  const output_token_count = readUint32LE(view, off); off += 4;
+
+  // Authorization
+  const auth_type = readUint32LE(view, off); off += 4;
+  const entry_count = readUint32LE(view, off); off += 4;
+  const auth_entries = [];
+  for (let i = 0; i < entry_count; i++) {
+    const authorizer_type = readUint32LE(view, off); off += 4;
+    let authorizer_id; [authorizer_id, off] = readString(view, pb, off);
+    const authorizer_agent_id = pb.slice(off, off + 16); off += 16;
+    const authorizer_seq = readUint64LE(view, off); off += 8;
+    const decision = readUint32LE(view, off); off += 4;
+    let condition; [condition, off] = readString(view, pb, off);
+    const auth_ts = readUint64LE(view, off); off += 8;
+    auth_entries.push({ authorizer_type, authorizer_id, authorizer_agent_id, authorizer_seq, decision, condition, timestamp_ms: auth_ts });
+  }
+
+  return {
+    parent_action_id, tool_name, parameters_hash, result_hash,
+    result_status, response_time_ms, protocol, action_type,
+    target_entity, evidence_uri, redacted, model_id,
+    input_token_count, output_token_count,
+    authorization: { type: auth_type, entries: auth_entries },
+  };
+}
+
+// Parse BOOT payload
+function parseBootPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+  let sdk_name; [sdk_name, off] = readString(view, pb, off);
+  let sdk_version; [sdk_version, off] = readString(view, pb, off);
+  const interceptor_count = readUint32LE(view, off); off += 4;
+  const interceptors = [];
+  for (let i = 0; i < interceptor_count; i++) {
+    let s; [s, off] = readString(view, pb, off);
+    interceptors.push(s);
+  }
+  let agent_framework; [agent_framework, off] = readString(view, pb, off);
+  let agent_name; [agent_name, off] = readString(view, pb, off);
+  let runtime; [runtime, off] = readString(view, pb, off);
+  const chain_level = readUint32LE(view, off); off += 4;
+  const fsync_mode = readUint32LE(view, off); off += 4;
+  let clock_source; [clock_source, off] = readString(view, pb, off);
+  const inference_recording = pb[off] === 0x01; off += 1;
+  const inference_evidence = pb[off] === 0x01; off += 1;
+  const evidence_recording = pb[off] === 0x01; off += 1;
+  const filter_config_hash = pb.slice(off, off + 32); off += 32;
+  let matched_agent_rule; [matched_agent_rule, off] = readString(view, pb, off);
+  let config_source; [config_source, off] = readString(view, pb, off);
+  const authorization_recording = pb[off] === 0x01; off += 1;
+
+  return {
+    sdk_name, sdk_version, interceptors, agent_framework, agent_name, runtime,
+    chain_level, fsync_mode, clock_source,
+    inference_recording, inference_evidence, evidence_recording,
+    filter_config_hash, matched_agent_rule, config_source, authorization_recording,
+  };
+}
+
+// Parse GAP payload
+function parseGapPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+  const first_lost = readUint64LE(view, off); off += 8;
+  const last_lost = readUint64LE(view, off); off += 8;
+  const count = readUint64LE(view, off); off += 8;
+  const reason = readUint32LE(view, off); off += 4;
+  let detail; [detail, off] = readString(view, pb, off);
+  return { first_lost, last_lost, count, reason, detail };
+}
+
+// Parse CHECKPOINT payload
+function parseCheckpointPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+  const record_count = readUint64LE(view, off); off += 8;
+  const gap_count = readUint64LE(view, off); off += 8;
+  const chain_hash = pb.slice(off, off + 32); off += 32;
+  const merkle_root = pb.slice(off, off + 32); off += 32;
+  const signature = pb.slice(off, off + 64); off += 64;
+  const signing_key_id = pb.slice(off, off + 32); off += 32;
+  const evidence_available = readUint64LE(view, off); off += 8;
+  const evidence_exported = readUint64LE(view, off); off += 8;
+  const evidence_expired = readUint64LE(view, off); off += 8;
+  const evidence_missing = readUint64LE(view, off); off += 8;
+  return { record_count, gap_count, chain_hash, merkle_root, signature, signing_key_id, evidence_available, evidence_exported, evidence_expired, evidence_missing };
+}
+
+// Parse RECOVERY payload
+function parseRecoveryPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+  const records_verified = readUint64LE(view, off); off += 8;
+  const records_truncated = readUint64LE(view, off); off += 8;
+  const last_valid_seq = readUint64LE(view, off); off += 8;
+  const recovery_method = readUint32LE(view, off); off += 4;
+  let detail; [detail, off] = readString(view, pb, off);
+  return { records_verified, records_truncated, last_valid_seq, recovery_method, detail };
+}
+
+// Parse KEY payload
+function parseKeyPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+  const public_key = pb.slice(off, off + 32); off += 32;
+  const key_id = pb.slice(off, off + 32); off += 32;
+  const expires_at = readUint64LE(view, off); off += 8;
+  const supersedes_key_id = pb.slice(off, off + 32); off += 32;
+  return { public_key, key_id, expires_at, supersedes_key_id };
+}
+
+// Parse WITNESS payload
+function parseWitnessPayload(pb) {
+  const view = new DataView(pb.buffer, pb.byteOffset, pb.byteLength);
+  let off = 0;
+  let witness_id; [witness_id, off] = readString(view, pb, off);
+  const checkpoint_seq = readUint64LE(view, off); off += 8;
+  const checkpoint_hash = pb.slice(off, off + 32); off += 32;
+  const witness_timestamp = readUint64LE(view, off); off += 8;
+  const receipt_signature = pb.slice(off, off + 64); off += 64;
+  const witness_public_key = pb.slice(off, off + 32); off += 32;
+  return { witness_id, checkpoint_seq, checkpoint_hash, witness_timestamp, receipt_signature, witness_public_key };
+}
+
+// SHA-256 using Web Crypto API
+async function sha256(data) {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return new Uint8Array(hashBuffer);
+}
+
+// Verify hash chain integrity
+async function verifyChain(records) {
+  let gaps = 0;
+  let expectedSeq = 1;
+
+  for (let i = 0; i < records.length; i++) {
+    const env = records[i].envelope;
+    const stored = records[i].storedBytes;
+
+    // Check hash chain linkage
+    if (i === 0) {
+      const isZero = env.prev_hash.every(b => b === 0);
+      if (!isZero) {
+        return { valid: false, checked: i + 1, gaps, brokenAt: env.sequence, error: 'Genesis record prev_hash is not zero bytes' };
+      }
+    } else {
+      const expectedHash = await sha256(records[i - 1].storedBytes);
+      const match = env.prev_hash.every((b, j) => b === expectedHash[j]);
+      if (!match) {
+        return {
+          valid: false, checked: i + 1, gaps, brokenAt: env.sequence,
+          expectedHash: bytesToHex(expectedHash),
+          actualHash: bytesToHex(env.prev_hash),
+          error: `Hash chain broken at record #${env.sequence}`,
+        };
+      }
+    }
+
+    // Check sequence
+    if (env.record_type === 2) { // GAP
+      gaps++;
+    }
+    expectedSeq = env.sequence + 1;
+  }
+
+  return { valid: true, checked: records.length, gaps, brokenAt: null, error: null };
+}
+
+// ============================================================================
+// UI
+// ============================================================================
+
+let allRecords = [];
+let chainHeader = null;
+
+function formatTimestamp(ms) {
+  if (!ms) return '--';
+  const d = new Date(ms);
+  return d.toISOString().replace('T', ' ').replace('Z', ' UTC').slice(0, 23) + ' UTC';
+}
+
+function formatTimestampShort(ms) {
+  if (!ms) return '--';
+  const d = new Date(ms);
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function typeBadge(type) {
+  const name = RECORD_TYPES[type] || 'UNKNOWN';
+  const cls = 'badge-' + name.toLowerCase();
+  return `<span class="badge ${cls}">${name}</span>`;
+}
+
+function resultStatusClass(status) {
+  const name = (RESULT_STATUS[status] || 'UNKNOWN').toLowerCase();
+  return `result-${name}`;
+}
+
+function getRecordDetails(env, payload) {
+  const type = env.record_type;
+  if (type === 1 && payload) { // ACTION
+    const status = RESULT_STATUS[payload.result_status] || '?';
+    const proto = PROTOCOL[payload.protocol] || '?';
+    const atype = ACTION_TYPE[payload.action_type] || '?';
+    return `<span class="font-medium">${escapeHtml(payload.tool_name)}</span>
+      <span class="text-xs ml-2" style="color:var(--text-secondary)">${proto} / ${atype}</span>
+      <span class="text-xs ml-2 ${resultStatusClass(payload.result_status)}">${status}</span>
+      ${payload.response_time_ms ? `<span class="text-xs ml-2" style="color:var(--text-secondary)">${payload.response_time_ms}ms</span>` : ''}`;
+  }
+  if (type === 2 && payload) { // GAP
+    const reason = GAP_REASON[payload.reason] || '?';
+    return `<span style="color:var(--red)">Lost ${payload.count} record(s)</span>
+      <span class="text-xs ml-2" style="color:var(--text-secondary)">seq ${payload.first_lost}-${payload.last_lost} (${reason})</span>`;
+  }
+  if (type === 3 && payload) { // CHECKPOINT
+    return `<span style="color:var(--green)">${payload.record_count} records, ${payload.gap_count} gaps</span>`;
+  }
+  if (type === 4 && payload) { // BOOT
+    return `<span class="font-medium">${escapeHtml(payload.agent_name)}</span>
+      <span class="text-xs ml-2" style="color:var(--text-secondary)">${escapeHtml(payload.sdk_name)} ${escapeHtml(payload.sdk_version)}</span>
+      <span class="text-xs ml-2" style="color:var(--text-secondary)">${CHAIN_LEVEL[payload.chain_level] || '?'}</span>`;
+  }
+  if (type === 5 && payload) { // RECOVERY
+    const method = RECOVERY_METHOD[payload.recovery_method] || '?';
+    return `<span>${payload.records_verified} verified, ${payload.records_truncated} truncated</span>
+      <span class="text-xs ml-2" style="color:var(--text-secondary)">${method}</span>`;
+  }
+  if (type === 6 && payload) { // KEY
+    return `<span class="hash-mono" style="word-break:break-all">key_id: ${bytesToHex(payload.key_id)}</span>`;
+  }
+  if (type === 7 && payload) { // WITNESS
+    return `<span>${escapeHtml(payload.witness_id)}</span>
+      <span class="text-xs ml-2" style="color:var(--text-secondary)">checkpoint_seq: ${payload.checkpoint_seq}</span>`;
+  }
+  return '<span style="color:var(--text-secondary)">--</span>';
+}
+
+function getDetailPanel(env, payload) {
+  const type = env.record_type;
+  let rows = '';
+
+  const addRow = (label, value) => {
+    rows += `<tr><td class="px-4 py-1 text-xs font-medium" style="color:var(--text-secondary);width:180px">${label}</td>
+             <td class="px-4 py-1 text-xs">${value}</td></tr>`;
+  };
+
+  addRow('Record ID', `<span class="hash-mono">${bytesToUUID(env.record_id)}</span>`);
+  addRow('Agent ID', `<span class="hash-mono">${bytesToUUID(env.agent_id)}</span>`);
+  addRow('Session ID', `<span class="hash-mono">${bytesToUUID(env.session_id)}</span>`);
+  addRow('Prev Hash', `<span class="hash-mono" style="word-break:break-all">${bytesToHex(env.prev_hash)}</span>`);
+  addRow('Schema Version', env.schema_version);
+
+  if (type === 1 && payload) {
+    addRow('Tool Name', escapeHtml(payload.tool_name));
+    addRow('Protocol', PROTOCOL[payload.protocol] || payload.protocol);
+    addRow('Action Type', ACTION_TYPE[payload.action_type] || payload.action_type);
+    addRow('Result Status', `<span class="${resultStatusClass(payload.result_status)}">${RESULT_STATUS[payload.result_status] || payload.result_status}</span>`);
+    addRow('Response Time', `${payload.response_time_ms}ms`);
+    addRow('Model ID', payload.model_id || '--');
+    addRow('Input Tokens', payload.input_token_count);
+    addRow('Output Tokens', payload.output_token_count);
+    addRow('Target Entity', payload.target_entity || '--');
+    addRow('Redacted', payload.redacted ? 'Yes' : 'No');
+    const authName = AUTH_TYPE[payload.authorization.type] || '?';
+    addRow('Authorization', authName);
+    if (payload.authorization.entries.length > 0) {
+      payload.authorization.entries.forEach((e, i) => {
+        const aType = AUTHORIZER_TYPE[e.authorizer_type] || '?';
+        const dec = AUTH_DECISION[e.decision] || '?';
+        addRow(`  Auth Entry ${i+1}`, `${aType}: ${escapeHtml(e.authorizer_id)} (${dec})${e.condition ? ' [' + escapeHtml(e.condition) + ']' : ''}`);
+      });
+    }
+    addRow('Parameters Hash', `<span class="hash-mono">${bytesToHex(payload.parameters_hash)}</span>`);
+    addRow('Result Hash', `<span class="hash-mono">${bytesToHex(payload.result_hash)}</span>`);
+    const parentZero = payload.parent_action_id.every(b => b === 0);
+    addRow('Parent Action ID', parentZero ? '--' : `<span class="hash-mono">${bytesToUUID(payload.parent_action_id)}</span>`);
+    addRow('Evidence URI', payload.evidence_uri || '--');
+  } else if (type === 2 && payload) {
+    addRow('First Lost', payload.first_lost);
+    addRow('Last Lost', payload.last_lost);
+    addRow('Count', payload.count);
+    addRow('Reason', GAP_REASON[payload.reason] || payload.reason);
+    addRow('Detail', payload.detail || '--');
+  } else if (type === 3 && payload) {
+    addRow('Record Count', payload.record_count);
+    addRow('Gap Count', payload.gap_count);
+    addRow('Chain Hash', `<span class="hash-mono" style="word-break:break-all">${bytesToHex(payload.chain_hash)}</span>`);
+    addRow('Merkle Root', `<span class="hash-mono" style="word-break:break-all">${bytesToHex(payload.merkle_root)}</span>`);
+    addRow('Evidence Available', payload.evidence_available);
+    addRow('Evidence Exported', payload.evidence_exported);
+    addRow('Evidence Expired', payload.evidence_expired);
+    addRow('Evidence Missing', payload.evidence_missing);
+  } else if (type === 4 && payload) {
+    addRow('SDK Name', escapeHtml(payload.sdk_name));
+    addRow('SDK Version', escapeHtml(payload.sdk_version));
+    addRow('Agent Name', escapeHtml(payload.agent_name));
+    addRow('Agent Framework', payload.agent_framework || '--');
+    addRow('Runtime', escapeHtml(payload.runtime));
+    addRow('Chain Level', CHAIN_LEVEL[payload.chain_level] || payload.chain_level);
+    addRow('Fsync Mode', FSYNC_MODE[payload.fsync_mode] || payload.fsync_mode);
+    addRow('Interceptors', payload.interceptors.length ? payload.interceptors.map(escapeHtml).join(', ') : '--');
+    addRow('Inference Recording', payload.inference_recording ? 'Yes' : 'No');
+    addRow('Evidence Recording', payload.evidence_recording ? 'Yes' : 'No');
+    addRow('Authorization Recording', payload.authorization_recording ? 'Yes' : 'No');
+    addRow('Config Source', payload.config_source || '--');
+    addRow('Matched Agent Rule', payload.matched_agent_rule || '--');
+  } else if (type === 5 && payload) {
+    addRow('Records Verified', payload.records_verified);
+    addRow('Records Truncated', payload.records_truncated);
+    addRow('Last Valid Seq', payload.last_valid_seq);
+    addRow('Recovery Method', RECOVERY_METHOD[payload.recovery_method] || payload.recovery_method);
+    addRow('Detail', payload.detail || '--');
+  } else if (type === 6 && payload) {
+    addRow('Public Key', `<span class="hash-mono">${bytesToHex(payload.public_key)}</span>`);
+    addRow('Key ID', `<span class="hash-mono">${bytesToHex(payload.key_id)}</span>`);
+    addRow('Expires At', payload.expires_at ? formatTimestamp(payload.expires_at) : 'Never');
+    addRow('Supersedes Key', `<span class="hash-mono">${bytesToHex(payload.supersedes_key_id)}</span>`);
+  } else if (type === 7 && payload) {
+    addRow('Witness ID', escapeHtml(payload.witness_id));
+    addRow('Checkpoint Seq', payload.checkpoint_seq);
+    addRow('Checkpoint Hash', `<span class="hash-mono">${bytesToHex(payload.checkpoint_hash)}</span>`);
+    addRow('Witness Timestamp', formatTimestamp(payload.witness_timestamp));
+    addRow('Receipt Signature', `<span class="hash-mono" style="word-break:break-all">${bytesToHex(payload.receipt_signature)}</span>`);
+    addRow('Witness Public Key', `<span class="hash-mono">${bytesToHex(payload.witness_public_key)}</span>`);
+  }
+
+  return `<td colspan="6" class="p-0"><div style="background:rgba(15,23,42,0.5);border-top:1px solid #334155;border-bottom:1px solid #334155;"><table class="w-full">${rows}</table></div></td>`;
+}
+
+function parsePayload(env) {
+  try {
+    const pb = env.payload_bytes;
+    switch (env.record_type) {
+      case 1: return parseActionPayload(pb);
+      case 2: return parseGapPayload(pb);
+      case 3: return parseCheckpointPayload(pb);
+      case 4: return parseBootPayload(pb);
+      case 5: return parseRecoveryPayload(pb);
+      case 6: return parseKeyPayload(pb);
+      case 7: return parseWitnessPayload(pb);
+      default: return null;
+    }
+  } catch (e) {
+    console.warn('Payload parse error for seq', env.sequence, e);
+    return null;
+  }
+}
+
+function renderStats(records, header, verifyResult) {
+  const grid = document.getElementById('statsGrid');
+  const typeCounts = {};
+  let minTs = Infinity, maxTs = 0;
+  let totalGapLost = 0;
+
+  for (const r of records) {
+    const t = r.envelope.record_type;
+    typeCounts[t] = (typeCounts[t] || 0) + 1;
+    if (r.envelope.timestamp_ms < minTs) minTs = r.envelope.timestamp_ms;
+    if (r.envelope.timestamp_ms > maxTs) maxTs = r.envelope.timestamp_ms;
+    if (t === 2 && r.payload) totalGapLost += r.payload.count;
+  }
+
+  const spanMs = maxTs - minTs;
+  const spanStr = spanMs < 60000 ? `${(spanMs/1000).toFixed(1)}s`
+    : spanMs < 3600000 ? `${(spanMs/60000).toFixed(1)}m`
+    : `${(spanMs/3600000).toFixed(1)}h`;
+
+  const stats = [
+    { label: 'Records', value: records.length, accent: false },
+    { label: 'Gaps', value: typeCounts[2] || 0, accent: (typeCounts[2] || 0) > 0, color: 'var(--red)' },
+    { label: 'Time Span', value: records.length > 1 ? spanStr : '--', accent: false },
+    { label: 'Actions', value: typeCounts[1] || 0, accent: false },
+    { label: 'Chain Status', value: verifyResult.valid ? 'VALID' : 'BROKEN', accent: true, color: verifyResult.valid ? 'var(--green)' : 'var(--red)' },
+    { label: 'Version', value: header.version, accent: false },
+  ];
+
+  grid.innerHTML = stats.map(s => `
+    <div class="stat-card">
+      <div class="text-xs mb-1" style="color: var(--text-secondary);">${s.label}</div>
+      <div class="text-xl font-bold" style="${s.accent ? 'color:' + s.color : ''}">${s.value}</div>
+    </div>
+  `).join('');
+
+  // Integrity banner
+  const banner = document.getElementById('integrityBanner');
+  banner.style.display = 'flex';
+  if (verifyResult.valid) {
+    banner.style.background = 'rgba(52, 211, 153, 0.08)';
+    banner.style.border = '1px solid rgba(52, 211, 153, 0.2)';
+    banner.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <div>
+        <div class="font-semibold chain-ok">Chain Integrity Verified</div>
+        <div class="text-xs" style="color:var(--text-secondary)">${verifyResult.checked} records checked, ${verifyResult.gaps} gap(s) &mdash; all hash links valid</div>
+      </div>`;
+  } else {
+    banner.style.background = 'rgba(248, 113, 113, 0.08)';
+    banner.style.border = '1px solid rgba(248, 113, 113, 0.2)';
+    banner.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      <div>
+        <div class="font-semibold chain-broken">Chain Integrity Broken</div>
+        <div class="text-xs" style="color:var(--text-secondary)">${verifyResult.error} at record #${verifyResult.brokenAt}</div>
+        ${verifyResult.expectedHash ? `<div class="hash-mono mt-1" style="word-break:break-all">Expected: ${verifyResult.expectedHash}</div>` : ''}
+        ${verifyResult.actualHash ? `<div class="hash-mono" style="word-break:break-all">Actual: ${verifyResult.actualHash}</div>` : ''}
+      </div>`;
+  }
+
+  // Type breakdown chips
+  const breakdown = document.getElementById('typeBreakdown');
+  breakdown.innerHTML = Object.entries(typeCounts)
+    .sort((a,b) => a[0] - b[0])
+    .map(([t, c]) => {
+      const name = RECORD_TYPES[t] || 'UNKNOWN';
+      return `<span class="badge badge-${name.toLowerCase()}" style="font-size:0.75rem; padding: 4px 12px;">${name}: ${c}</span>`;
+    }).join('');
+}
+
+function renderRecords(records, filter) {
+  const tbody = document.getElementById('recordsBody');
+  const filtered = filter === 'all' ? records : records.filter(r => r.envelope.record_type === parseInt(filter));
+
+  const rows = [];
+  for (const r of filtered) {
+    const env = r.envelope;
+    const payload = r.payload;
+    const id = `rec-${env.sequence}`;
+
+    rows.push(`<tr class="record-row text-sm" style="border-bottom: 1px solid #1e293b;">
+      <td class="px-2 py-2 text-center">
+        <button class="expand-btn" onclick="toggleDetail('${id}', this)" aria-label="Expand">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="5 3 9 7 5 11"/>
+          </svg>
+        </button>
+      </td>
+      <td class="px-4 py-2 font-mono text-xs" style="color:var(--accent)">${env.sequence}</td>
+      <td class="px-4 py-2">${typeBadge(env.record_type)}</td>
+      <td class="px-4 py-2 text-xs" style="color:var(--text-secondary)">${formatTimestampShort(env.timestamp_ms)}</td>
+      <td class="px-4 py-2 text-sm">${getRecordDetails(env, payload)}</td>
+      <td class="px-4 py-2" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0"><span class="hash-mono" title="${bytesToHex(env.prev_hash)}">${bytesToHex(env.prev_hash)}</span></td>
+    </tr>`);
+
+    rows.push(`<tr id="${id}" class="payload-detail">
+      ${getDetailPanel(env, payload)}
+    </tr>`);
+  }
+
+  tbody.innerHTML = rows.join('');
+}
+
+function toggleDetail(id, btn) {
+  const row = document.getElementById(id);
+  const isOpen = row.classList.contains('open');
+  row.classList.toggle('open');
+  btn.querySelector('svg').style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+async function processFile(arrayBuffer, fileName) {
+  chainHeader = parseHeader(arrayBuffer);
+  if (!chainHeader) {
+    alert('Invalid AHP chain file: bad magic or too short.');
+    return;
+  }
+
+  // Parse all records
+  allRecords = [];
+  for (const { storedBytes } of iterRecords(arrayBuffer)) {
+    const env = parseEnvelope(storedBytes);
+    const payload = parsePayload(env);
+    allRecords.push({ storedBytes, envelope: env, payload });
+  }
+
+  // Verify chain integrity
+  const verifyResult = await verifyChain(allRecords);
+
+  // Update UI
+  document.getElementById('uploadArea').style.display = 'none';
+  document.getElementById('resultsArea').style.display = 'block';
+  document.getElementById('fileInfo').style.display = 'block';
+  document.getElementById('fileName').textContent = fileName;
+
+  renderStats(allRecords, chainHeader, verifyResult);
+  renderRecords(allRecords, 'all');
+}
+
+// Export to JSON
+function exportJSON() {
+  const output = allRecords.map(r => {
+    const env = r.envelope;
+    const base = {
+      record_id: bytesToUUID(env.record_id),
+      agent_id: bytesToUUID(env.agent_id),
+      session_id: bytesToUUID(env.session_id),
+      timestamp_ms: env.timestamp_ms,
+      sequence: env.sequence,
+      prev_hash: bytesToHex(env.prev_hash),
+      schema_version: env.schema_version,
+      type: RECORD_TYPES[env.record_type] || 'UNKNOWN',
+    };
+    if (r.payload) {
+      // Convert Uint8Arrays to hex in payload
+      const p = {};
+      for (const [k, v] of Object.entries(r.payload)) {
+        if (v instanceof Uint8Array) p[k] = bytesToHex(v);
+        else if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+          const inner = {};
+          for (const [ik, iv] of Object.entries(v)) {
+            inner[ik] = iv instanceof Uint8Array ? bytesToHex(iv) : iv;
+          }
+          p[k] = inner;
+        } else p[k] = v;
+      }
+      base.payload = p;
+    }
+    return base;
+  });
+
+  const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'chain-export.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Event handlers
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) file.arrayBuffer().then(buf => processFile(buf, file.name));
+});
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) file.arrayBuffer().then(buf => processFile(buf, file.name));
+});
+
+document.getElementById('typeFilter').addEventListener('change', (e) => {
+  renderRecords(allRecords, e.target.value);
+});
+
+document.getElementById('exportBtn').addEventListener('click', exportJSON);
+
+// ---- Resizable columns (drag to expand) ----
+(function initResizableColumns() {
+  const table = document.querySelector('table');
+  if (!table) return;
+  const headers = table.querySelectorAll('th.resizable');
+  let dragging = null;
+  let startX = 0;
+  let startW = 0;
+
+  headers.forEach(th => {
+    th.addEventListener('mousedown', (e) => {
+      // Only trigger on the right 8px (the resize handle)
+      const rect = th.getBoundingClientRect();
+      if (e.clientX < rect.right - 8) return;
+      dragging = th;
+      startX = e.clientX;
+      startW = th.offsetWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const diff = e.clientX - startX;
+    const newW = Math.max(40, startW + diff);
+    dragging.style.width = newW + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (dragging) {
+      dragging = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+})();
+
+// Auto-load demo-chain.ahp if served via localhost
+(function autoLoad() {
+  if (location.protocol !== 'file:') {
+    fetch('demo-chain.ahp')
+      .then(r => { if (r.ok) return r.arrayBuffer(); throw new Error('no demo chain'); })
+      .then(buf => processFile(buf, 'demo-chain.ahp'))
+      .catch(() => {}); // No demo chain available — show drop zone
+  }
+})();
+</script>
+
+</body>
+</html>

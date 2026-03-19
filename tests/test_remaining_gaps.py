@@ -137,7 +137,10 @@ class TestConfigYAMLFile(unittest.TestCase):
                 "authorization": {"record": True},
                 "fsync_mode": "every",
                 "checkpoint_interval": 500,
-                "witness": {"enabled": False},
+                "witness": {
+                    "enabled": True,
+                    "endpoints": ["https://localhost:8120"],
+                },
             },
             "filters": [
                 {"preset": "pci"},
@@ -263,8 +266,10 @@ class TestWitnessAutoFlow(unittest.TestCase):
 
         # Clean receipts
         receipts_file = "witness_receipts.json"
-        if Path(receipts_file).exists():
+        try:
             Path(receipts_file).unlink()
+        except (FileNotFoundError, PermissionError):
+            pass  # File doesn't exist or can't be deleted; that's okay
 
         try:
             tmpdir = tempfile.mkdtemp()
@@ -303,8 +308,11 @@ class TestWitnessAutoFlow(unittest.TestCase):
 
         finally:
             server.shutdown()
-            if Path(receipts_file).exists():
-                Path(receipts_file).unlink()
+            try:
+                if Path(receipts_file).exists():
+                    Path(receipts_file).unlink()
+            except (FileNotFoundError, PermissionError):
+                pass  # File doesn't exist or can't be deleted; that's okay
 
 
 # ================================================================

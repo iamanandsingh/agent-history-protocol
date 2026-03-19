@@ -73,6 +73,8 @@ All record types share a common envelope. This enables hash chain verification w
 
 **Enum convention:** All enums in this specification reserve value 0 as UNSPECIFIED. This prevents Protobuf's default zero-value from being silently interpreted as a valid state. A record with any enum field set to 0 (UNSPECIFIED) is malformed and MUST be rejected by verifiers.
 
+**Enum naming:** Throughout this specification, enum values are referred to by their short names (e.g., MCP, HTTP, INFERENCE). In the Protobuf schema (Appendix A), these values use prefixed names following Protobuf conventions (e.g., PROTOCOL_MCP, ACTION_INFERENCE). In JSON serialization (Appendix H), the short prose names are used (e.g., `"MCP"`, `"INFERENCE"`). Implementations MUST support mapping between all three representations.
+
 ### 3.2 ActionRecord (type = ACTION)
 
 One agent action. The core record type.
@@ -323,6 +325,21 @@ When `type = AUTH_MULTI_PARTY`, agent frameworks SHOULD NOT execute the action u
 `AUTH_NONE` means "no authorization was required for this action." When `authorization_recording = false` in the BootRecord, the SDK defaults all ActionRecords to `AUTH_NONE` — the field is present but not meaningfully populated. When `authorization_recording = true`, the SDK actively tracks authorization and `AUTH_NONE` is a deliberate statement that no approval was needed.
 
 Auditors check `authorization_recording` in the BootRecord to know whether the values are meaningful.
+
+### 3.10 Maximum Field and Record Sizes
+
+Implementations SHOULD enforce the following maximum sizes to ensure interoperability:
+
+| Field | RECOMMENDED Maximum |
+|-------|-------------------|
+| `tool_name` | 1024 bytes |
+| `target_entity` | 4096 bytes |
+| `detail` | 4096 bytes |
+| `condition` | 4096 bytes |
+| `authorizer_id` | 256 bytes |
+| Total record (canonical bytes) | 1 MB (1,048,576 bytes) |
+
+Records exceeding these limits MAY be rejected by verifiers and witnesses. SDKs SHOULD truncate or reject oversized fields before recording.
 
 ---
 
@@ -610,6 +627,13 @@ At Level 2+, BatchCheckpoints MUST include:
 - `signature`: Ed25519 signature over `merkle_root`
 - `signing_key_id`: The `key_id` of the signing key
 
+**Merkle tree construction:** The Merkle tree follows RFC 6962 Section 2.1:
+
+- **Leaf nodes:** `SHA-256(0x00 || canonical_bytes(record))` for each record since the last checkpoint.
+- **Internal nodes:** `SHA-256(0x01 || left_child || right_child)`.
+- **Empty tree:** If no records have been emitted since the last checkpoint, `merkle_root` MUST be 32 zero bytes (`0x00 * 32`).
+- **Signature input:** The Ed25519 signature covers the `merkle_root` bytes directly (32 bytes, no additional framing).
+
 Verification: look up the public key from the most recent KeyGenesisRecord with matching `key_id`, verify the Ed25519 signature over `merkle_root`.
 
 ### 7.3 Key Rotation
@@ -662,6 +686,22 @@ Returns an array of receipts for the given agent with `sequence > N`.
 **GET /ahp/v1/identity**
 
 Returns the witness's public key and identity information for trust establishment.
+
+**Error Responses:**
+
+All witness API endpoints MUST return appropriate HTTP status codes on failure:
+
+| Status | Meaning | When |
+|--------|---------|------|
+| 400 | Bad Request | Missing required fields or malformed request body |
+| 401 | Unauthorized | Invalid or missing agent signature |
+| 404 | Not Found | Receipt ID or agent ID does not exist |
+| 409 | Conflict | Duplicate checkpoint (same `agent_id` + `sequence` already recorded) |
+| 413 | Payload Too Large | Request body exceeds witness size limit |
+| 429 | Too Many Requests | Rate limited; client SHOULD retry with exponential backoff |
+| 503 | Service Unavailable | Witness temporarily unavailable; client SHOULD retry |
+
+Error response body MUST include a JSON object with `error` (string, machine-readable code) and `message` (string, human-readable description).
 
 ### 8.2 Guarantees
 
@@ -1204,13 +1244,35 @@ payload:
   authorization:     (type: AUTH_NONE (1), entries count: 0)
 ```
 
-Canonical bytes (hex): *(to be computed by reference implementation)*
+Canonical bytes (hex):
+```
+01903f5a00007000800000000000000101903f5a000070008000000000000010
+01903f5a000070008000000000000020004cf1238e01000001000000000000
+00000000000000000000000000000000000000000000000000000000000000
+00000001000000010000000100000000000000000000000000000000000000
+09000000726561645f66696c65f1e315a560763fcc966159bdae9a783314
+1f2ae6726c9419cc9f7475d93fa6bf010000002a000000010000000100000
+00000000000000000000000000000000000000000000100000000000000
+```
 
-Record hash: *(to be computed)*
+Size: 214 bytes
+Record hash (SHA-256): `a13498b6876803c50d5c6764e57bead259df0e2e89a55fde014a4ba0bd813360`
 
-### B.2 Chained INFERENCE Record
+### B.2 All Record Type Test Vectors
 
-*(to be computed by reference implementation)*
+The following test vectors use fixed deterministic field values. Any conformant implementation MUST produce identical SHA-256 hashes for the same inputs.
+
+| # | Record Type | Size | SHA-256 |
+|---|-------------|------|---------|
+| 1 | ACTION | 227 bytes | `14e4db86a306d6e3697005c35f560e10a66620e020ff99d265093ec9dbc197da` |
+| 2 | GAP | 166 bytes | `8bd2e506da72e91b3d4bbae63b46a75444b010e1f32eb94ec72df186dc4d58e0` |
+| 3 | CHECKPOINT | 316 bytes | `209ffc90ebad22529ec646cc394068ca9c49e97e96413e6713b8984c2e592c6e` |
+| 4 | BOOT | 234 bytes | `d22f341f7a1e0842972275eb80ff1cac4e8d2bf01d35403f73991142fdc32a15` |
+| 5 | RECOVERY | 161 bytes | `192a80a325e7a57b5284214250122fe84a6e7d8860a7a5377a67109b9154838d` |
+| 6 | KEY | 212 bytes | `7ebcc94babdbb3c0c9f1229612f480c1b376568da4607be4ced73bc17ff6fc4f` |
+| 7 | WITNESS | 277 bytes | `4c336eab0edeb2f02dc03adfb2d0cb50c29f765d69d0228e4f3475d8619e0591` |
+
+Full test vector inputs and hex output are provided in the reference implementation's `tests/` directory and the script `scripts/generate_test_vectors.py`.
 
 ---
 
@@ -1230,7 +1292,15 @@ Record entries (repeated):
   [4B] CRC32C: checksum of Length + Record bytes
 ```
 
-Segments at 64 MB. Chain files are append-only.
+Segment rotation is RECOMMENDED at 64 MB file size. Chain files are append-only.
+
+### C.1 Segment Rotation Semantics
+
+When a chain file reaches the RECOMMENDED 64 MB threshold, the SDK rotates to a new segment file (e.g., `my-agent.001.ahp`, `my-agent.002.ahp`).
+
+- **Chain continuity:** `prev_hash` MUST chain across segment boundaries. The first record in a new segment MUST have `prev_hash` equal to `SHA-256(stored_bytes(last_record_in_previous_segment))`. Segment rotation does not break the logical chain.
+- **Verification:** Verification of multi-segment chains requires reading segments in sequence order. A verifier MUST process all segments from the first to the last to validate the full hash chain.
+- **Export acknowledgment:** At Level 1, segments SHOULD NOT be rotated until exported and acknowledged. At Level 3, segments MUST NOT be rotated until exported and acknowledged (Section 11.3).
 
 ---
 
@@ -1251,13 +1321,196 @@ Each file contains the raw bytes that were hashed (after PII filtering). Content
 
 ## Appendix E: PII Filter Preset Patterns
 
-*(Exact patterns to be defined. Each preset expands to a list of filter definitions with name, PCRE2 pattern, replacement, and scope. All SDKs MUST ship identical patterns.)*
+All SDKs MUST ship the following five presets with identical patterns. Patterns use PCRE2 syntax (with stdlib `re` as fallback where PCRE2 is unavailable).
+
+### E.1 `pci` — Payment Card Industry
+
+| Name | Pattern | Replacement | Scope |
+|------|---------|-------------|-------|
+| credit_card | `\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b` | `[REDACTED:CC]` | parameters, results |
+| cvv | `\b\d{3,4}\b(?=.*(?:cvv\|cvc\|security))` | `[REDACTED:CVV]` | parameters, results |
+
+### E.2 `pii-us` — US Personally Identifiable Information
+
+| Name | Pattern | Replacement | Scope |
+|------|---------|-------------|-------|
+| ssn | `\b\d{3}-\d{2}-\d{4}\b` | `[REDACTED:SSN]` | parameters, results |
+
+### E.3 `credentials` — API Keys and Secrets
+
+| Name | Pattern | Replacement | Scope |
+|------|---------|-------------|-------|
+| bearer_token | `Bearer\s+[A-Za-z0-9\-._~+/]+=*` | `Bearer [REDACTED:TOKEN]` | parameters, results |
+| api_key | `(?:api[_-]?key\|apikey\|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9\-._~+/]{16,}["']?` | `[REDACTED:API_KEY]` | all |
+| password | `(?:password\|passwd\|pwd)\s*[:=]\s*["']?[^\s"']{4,}["']?` | `[REDACTED:PASSWORD]` | all |
+
+### E.4 `pii-eu` — EU Personal Data (GDPR)
+
+| Name | Pattern | Replacement | Scope |
+|------|---------|-------------|-------|
+| iban | `\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}[A-Z0-9]{0,16}\b` | `[REDACTED:IBAN]` | parameters, results |
+| eu_national_id | `\b[A-Z]{1,2}\d{6,9}[A-Z]?\b` | `[REDACTED:EU_ID]` | parameters, results |
+| eu_passport | `\b[A-Z]{1,2}\d{7,8}\b` | `[REDACTED:PASSPORT]` | parameters, results |
+
+### E.5 `hipaa` — US Health Data
+
+| Name | Pattern | Replacement | Scope |
+|------|---------|-------------|-------|
+| mrn | `\bMRN[-:\s]*\d{6,10}\b` | `[REDACTED:MRN]` | parameters, results |
+| dob | `\b(?:DOB\|Date of Birth)[-:\s]*\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}\b` | `[REDACTED:DOB]` | all |
+| phone_us | `\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b` | `[REDACTED:PHONE]` | parameters, results |
+| email | `[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}` | `[REDACTED:EMAIL]` | parameters, results |
 
 ---
 
 ## Appendix F: Conformance Test Vectors
 
-*(Complete test vectors with computed hashes to be generated by reference implementation. See PSD Section 13 for the vector structure.)*
+The following test vectors were generated by the Python reference implementation (v0.1.0a1). Any conformant SDK MUST produce byte-for-byte identical canonical output and identical SHA-256 hashes for these inputs.
+
+### F.1 Shared Constants
+
+All vectors use these fixed identifiers:
+
+```
+record_id:  0189b4d8f0007000800000000000000a (UUID v7, 16 bytes)
+agent_id:   0189b4d8f0007000800000000000000b (UUID v7, 16 bytes)
+session_id: 0189b4d8f0007000800000000000000c (UUID v7, 16 bytes)
+timestamp_ms: 1700000000000
+schema_version: 1
+```
+
+### F.2 Vector 1: ActionRecord
+
+```
+sequence: 1
+prev_hash: (32 zero bytes)
+type: ACTION (1)
+payload:
+  tool_name: "search_orders"
+  parameters_hash: SHA-256("test_params")[:16]
+  result_hash: SHA-256("test_result")[:16]
+  result_status: SUCCESS (1)
+  response_time_ms: 42
+  protocol: MCP (1)
+  action_type: TOOL_CALL (1)
+  target_entity: "orders_db"
+  authorization: AUTH_NONE, 0 entries
+
+Canonical bytes: 227 bytes
+SHA-256: 14e4db86a306d6e3697005c35f560e10a66620e020ff99d265093ec9dbc197da
+```
+
+### F.3 Vector 2: GapRecord
+
+```
+sequence: 5
+prev_hash: SHA-256(Vector 1 canonical bytes)
+type: GAP (2)
+payload:
+  first_lost_sequence: 2
+  last_lost_sequence: 4
+  count: 3
+  reason: CRASH (1)
+  detail: "Power failure during write"
+
+Canonical bytes: 166 bytes
+SHA-256: 8bd2e506da72e91b3d4bbae63b46a75444b010e1f32eb94ec72df186dc4d58e0
+```
+
+### F.4 Vector 3: CheckpointRecord
+
+```
+sequence: 6
+prev_hash: SHA-256(Vector 2 canonical bytes)
+type: CHECKPOINT (3)
+payload:
+  record_count: 100
+  gap_count: 1
+  chain_hash: SHA-256(Vector 2 canonical bytes)
+  merkle_root: (32 zero bytes)
+  signature: (64 zero bytes)
+  signing_key_id: (32 zero bytes)
+
+Canonical bytes: 316 bytes
+SHA-256: 209ffc90ebad22529ec646cc394068ca9c49e97e96413e6713b8984c2e592c6e
+```
+
+### F.5 Vector 4: BootRecord
+
+```
+sequence: 7
+prev_hash: SHA-256(Vector 3 canonical bytes)
+type: BOOT (4)
+payload:
+  sdk_name: "ahp-python"
+  sdk_version: "0.1.0a1"
+  agent_name: "test-agent"
+  runtime: "python 3.11.0"
+  chain_level: LEVEL_1 (1)
+  inference_recording: true
+  inference_evidence: false
+  evidence_recording: true
+  authorization_recording: false
+  filter_config_hash: (32 zero bytes)
+
+Canonical bytes: 234 bytes
+SHA-256: d22f341f7a1e0842972275eb80ff1cac4e8d2bf01d35403f73991142fdc32a15
+```
+
+### F.6 Vector 5: RecoveryRecord
+
+```
+sequence: 8
+prev_hash: SHA-256(Vector 4 canonical bytes)
+type: RECOVERY (5)
+payload:
+  records_verified: 99
+  records_truncated: 1
+  last_valid_seq: 99
+  recovery_method: CHAIN_SCAN (2)
+  detail: "Recovered after crash"
+
+Canonical bytes: 161 bytes
+SHA-256: 192a80a325e7a57b5284214250122fe84a6e7d8860a7a5377a67109b9154838d
+```
+
+### F.7 Vector 6: KeyGenesisRecord
+
+```
+sequence: 9
+prev_hash: SHA-256(Vector 5 canonical bytes)
+type: KEY (6)
+payload:
+  public_key: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+  key_id: SHA-256(public_key)
+  expires_at: 0 (no expiration)
+  supersedes_key_id: (32 zero bytes)
+
+Canonical bytes: 212 bytes
+SHA-256: 7ebcc94babdbb3c0c9f1229612f480c1b376568da4607be4ced73bc17ff6fc4f
+```
+
+### F.8 Vector 7: WitnessReceipt
+
+```
+sequence: 10
+prev_hash: SHA-256(Vector 6 canonical bytes)
+type: WITNESS (7)
+payload:
+  witness_id: "ahp-reference-witness"
+  checkpoint_seq: 6
+  checkpoint_hash: SHA-256(Vector 3 canonical bytes)
+  witness_timestamp: 1700000001000
+  receipt_signature: (64 zero bytes)
+  witness_public_key: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+
+Canonical bytes: 277 bytes
+SHA-256: 4c336eab0edeb2f02dc03adfb2d0cb50c29f765d69d0228e4f3475d8619e0591
+```
+
+### F.9 Chain Verification
+
+Vectors 1–7 form a valid hash chain. Each vector's `prev_hash` equals `SHA-256(canonical_bytes(previous_vector))`. A conformant verifier MUST accept this chain as valid with 7 records checked, 1 gap, and no integrity errors.
 
 ---
 

@@ -1,7 +1,18 @@
 # AHP -- Agent History Protocol
 
-Tamper-evident recording for AI agent actions. Every tool call, inference,
-and delegation is written to a hash-chained log that anyone can verify.
+The Agent History Protocol (AHP) is an open standard for tamper-evident recording of AI agent actions. Every tool call, inference, and delegation is written to a hash-chained log that anyone can verify — a flight recorder for AI agents.
+
+## Documents
+
+1. **This README** — quickstart and CLI reference
+2. **[Protocol Specification Document](ahp-psd.md)** — design rationale, architecture decisions, and open questions (informative)
+3. **[Specification](agent-history-protocol-spec.md)** — normative protocol spec for implementers
+4. **[Explainer](explainer-script.md)** — general-audience overview of what AHP is and why it matters
+
+## Prerequisites
+
+- Python 3.9+
+- Optional: `cryptography` package (for Ed25519 signing, Level 2+)
 
 ## Install
 
@@ -91,4 +102,4 @@ https://github.com/ahp-protocol/ahp/blob/main/agent-history-protocol-spec.md
 
 ## License
 
-Apache 2.0
+Apache 2.0 — see [LICENSE](LICENSE).
