@@ -24,7 +24,7 @@ from ahp.core.types import RecordType, ZERO_HASH_32, SCHEMA_VERSION
 from ahp.core.records import Record, Payload, PAYLOAD_TYPE_MAP
 from ahp.core.canonical import canonical_bytes
 from ahp.core.uuid7 import uuid7
-from ahp.core.chain import MAGIC, FILE_VERSION, HEADER_SIZE
+from ahp.core.chain import MAGIC, FILE_VERSION
 
 
 class AsyncChainWriter:
@@ -169,10 +169,8 @@ class AsyncChainWriter:
         with open(self.path, 'ab') as f:
             length = len(stored)
             length_bytes = struct.pack('<I', length)
-            f.write(length_bytes)
-            f.write(stored)
-            crc = zlib.crc32(length_bytes + stored) & 0xFFFFFFFF
-            f.write(struct.pack('<I', crc))
+            crc = struct.pack('<I', zlib.crc32(length_bytes + stored) & 0xFFFFFFFF)
+            f.write(length_bytes + stored + crc)
 
     @property
     def sequence(self) -> int:

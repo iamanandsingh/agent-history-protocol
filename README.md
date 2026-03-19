@@ -5,9 +5,7 @@ The Agent History Protocol (AHP) is an open standard for tamper-evident recordin
 ## Documents
 
 1. **This README** — quickstart and CLI reference
-2. **[Protocol Specification Document](ahp-psd.md)** — design rationale, architecture decisions, and open questions (informative)
-3. **[Specification](agent-history-protocol-spec.md)** — normative protocol spec for implementers
-4. **[Explainer](explainer-script.md)** — general-audience overview of what AHP is and why it matters
+2. **[Specification](agent-history-protocol-spec.md)** — normative protocol spec for implementers
 
 ## Prerequisites
 

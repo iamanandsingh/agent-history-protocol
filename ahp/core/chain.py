@@ -13,12 +13,12 @@ import threading
 import time
 import zlib
 from pathlib import Path
-from typing import Generator, List, Optional, Union
+from typing import Optional, Union
 
 from ahp.core.types import RecordType, GapReason, RecoveryMethod, ZERO_HASH_32, SCHEMA_VERSION
 from ahp.core.records import (
-    Record, Payload, PAYLOAD_TYPE_MAP, BootPayload, ActionPayload,
-    GapPayload, CheckpointPayload, RecoveryPayload, KeyPayload, WitnessPayload,
+    Record, Payload, PAYLOAD_TYPE_MAP,
+    GapPayload, CheckpointPayload, RecoveryPayload,
 )
 from ahp.core.canonical import canonical_bytes
 from ahp.core.uuid7 import uuid7
@@ -36,6 +36,7 @@ class ChainWriter:
     def __init__(self, path: Union[str, Path], agent_id: Optional[bytes] = None,
                  session_id: Optional[bytes] = None,
                  fsync_mode: str = "batch",
+                 fsync_batch_size: int = 1000,
                  prev_hash: Optional[bytes] = None,
                  start_sequence: int = 0):
         self.path = Path(path)
@@ -46,6 +47,7 @@ class ChainWriter:
         self._record_count = 0
         self._gap_count = 0
         self._fsync_mode = fsync_mode  # "every", "batch", "none"
+        self._fsync_batch_size = fsync_batch_size
         self._writes_since_fsync = 0
         self._lock = threading.Lock()
 
@@ -56,6 +58,9 @@ class ChainWriter:
 
         if not self.path.exists():
             self._write_header()
+
+        # Initialize in-memory byte counter (eliminates stat() per record for rotation check)
+        self._bytes_written = self.path.stat().st_size
 
         # Open persistent handle for appending
         self._data_file = open(self.path, 'ab')
@@ -222,6 +227,7 @@ class ChainWriter:
         old_sequence = self._sequence
         old_record_count = self._record_count
         old_gap_count = self._gap_count
+        old_bytes_written = self._bytes_written
 
         # Update chain state
         self._prev_hash = hashlib.sha256(stored).digest()
@@ -239,17 +245,19 @@ class ChainWriter:
                 f = self._data_file
 
             length = len(stored)
-            f.write(struct.pack('<I', length))
-            f.write(stored)
-            f.write(struct.pack('<I', zlib.crc32(struct.pack('<I', length) + stored) & 0xFFFFFFFF))
+            length_bytes = struct.pack('<I', length)
+            crc = struct.pack('<I', zlib.crc32(length_bytes + stored) & 0xFFFFFFFF)
+            frame = length_bytes + stored + crc
+            f.write(frame)
             f.flush()
+            self._bytes_written += len(frame)
 
             # fsync per spec Section 10.1
             self._writes_since_fsync += 1
             if self._fsync_mode == "every":
                 os.fsync(f.fileno())
                 self._writes_since_fsync = 0
-            elif self._fsync_mode == "batch" and self._writes_since_fsync >= 100:
+            elif self._fsync_mode == "batch" and self._writes_since_fsync >= self._fsync_batch_size:
                 os.fsync(f.fileno())
                 self._writes_since_fsync = 0
             # "none" — no fsync, OS decides
@@ -259,6 +267,7 @@ class ChainWriter:
             self._sequence = old_sequence
             self._record_count = old_record_count
             self._gap_count = old_gap_count
+            self._bytes_written = old_bytes_written
             raise
 
         return record
@@ -278,6 +287,10 @@ class ChainWriter:
     @property
     def gap_count(self) -> int:
         return self._gap_count
+
+    @property
+    def bytes_written(self) -> int:
+        return self._bytes_written
 
 
 class ChainReader:

@@ -12,12 +12,11 @@ from typing import List
 from ahp.core.types import (
     RecordType, ResultStatus, Protocol, ActionType,
     AuthorizationType, AuthorizerType, AuthorizationDecision,
-    GapReason, ChainLevel, FsyncMode, RecoveryMethod,
+    GapReason, ChainLevel,
 )
 from ahp.core.records import (
     Record, ActionPayload, GapPayload, CheckpointPayload,
-    BootPayload, RecoveryPayload, KeyPayload, WitnessPayload,
-    Authorization, AuthorizationEntry,
+    BootPayload, Authorization,
 )
 
 # Limits

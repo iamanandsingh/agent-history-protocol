@@ -74,6 +74,9 @@ class FilterPipeline:
             self.filters.extend(filters)
         for f in self.filters:
             f.compile()
+        # Pre-partition by scope to avoid per-payload membership checks
+        self._param_filters = [f for f in self.filters if 'parameters' in f.scope or 'all' in f.scope]
+        self._result_filters = [f for f in self.filters if 'results' in f.scope or 'all' in f.scope]
 
     def apply(self, payload: bytes, scope: str = "parameters") -> Tuple[bytes, bool]:
         """Apply all matching filters. Returns (filtered_bytes, was_redacted)."""
@@ -82,12 +85,12 @@ class FilterPipeline:
         except UnicodeDecodeError:
             return payload, False  # Binary payload — filters don't apply
 
+        active = self._param_filters if scope == "parameters" else self._result_filters
         redacted = False
-        for f in self.filters:
-            if scope in f.scope or 'all' in f.scope:
-                text, matched = f.apply(text)
-                if matched:
-                    redacted = True
+        for f in active:
+            text, matched = f.apply(text)
+            if matched:
+                redacted = True
 
         return text.encode('utf-8'), redacted
 

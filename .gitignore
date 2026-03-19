@@ -35,8 +35,6 @@ Thumbs.db
 # Node.js
 node_modules/
 package-lock.json
-test_openclaw/*.jsonl
-test_openclaw/evidence/
 
 # TypeScript build output
 packages/sdk-typescript/dist/

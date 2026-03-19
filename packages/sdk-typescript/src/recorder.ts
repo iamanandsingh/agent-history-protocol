@@ -27,7 +27,6 @@ import * as fs from "fs";
 
 import {
   Record as AHPRecord,
-  RecordType,
   ResultStatus,
   Protocol,
   ActionType,
@@ -35,7 +34,6 @@ import {
   GapReason,
   ChainLevel,
   FsyncMode,
-  ZERO_HASH_16,
   ZERO_HASH_32,
   ZERO_UUID,
   createActionPayload,
@@ -43,10 +41,6 @@ import {
   createCheckpointPayload,
   createKeyPayload,
   Authorization,
-  ActionPayload,
-  BootPayload,
-  CheckpointPayload,
-  KeyPayload,
 } from "./types";
 import { canonicalBytes } from "./canonical";
 import { ChainWriter } from "./chain";
@@ -58,7 +52,7 @@ import {
   sign as ed25519Sign,
   computeMerkleRoot,
 } from "./signing";
-import { AHPConfig, loadConfig, defaultConfig, FilterConfig } from "./config";
+import { AHPConfig, loadConfig, defaultConfig } from "./config";
 import { recoverChain, RecoveryResult } from "./recovery";
 
 // SDK identity constants
@@ -428,8 +422,7 @@ export class AHPRecorder {
   // --- Resource management ---
 
   close(): void {
-    // ChainWriter doesn't have a close method currently,
-    // but we make this available for the Disposable pattern.
+    this._chain.close();
   }
 
   // --- Read-only accessors ---
@@ -557,18 +550,12 @@ export class AHPRecorder {
   }
 
   private _checkRotation(): void {
-    let chainSize: number;
-    try {
-      chainSize = fs.statSync(this._chainPath).size;
-    } catch {
-      return;
-    }
+    const chainSize = this._chain.bytesWritten;
 
     if (chainSize < this._maxSegmentBytes) return;
 
-    // Save chain state for cross-segment continuity
-    const prevHash = this._chain.prevHash;
-    const prevSequence = this._chain.sequence;
+    // Close persistent file handle before renaming
+    this._chain.close();
 
     // Rename current chain to a timestamped segment
     const timestamp = Math.floor(Date.now() / 1000);

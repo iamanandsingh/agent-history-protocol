@@ -5,10 +5,9 @@ Hosts tools over HTTP using JSON-RPC 2.0, matching MCP's tool call pattern.
 from __future__ import annotations
 
 import json
-import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Dict, Callable, Any, Optional
+from typing import Dict, Callable, Optional
 
 
 class MCPToolServer:

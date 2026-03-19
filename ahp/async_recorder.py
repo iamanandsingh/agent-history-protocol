@@ -17,9 +17,8 @@ from typing import Callable, Optional, List, Any
 
 from ahp._base_recorder import RecorderBase
 from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
+    ResultStatus, Protocol, ActionType,
     AuthorizationType, GapReason,
-    ZERO_HASH_16, ZERO_HASH_32,
 )
 from ahp.core.records import (
     ActionPayload, GapPayload,

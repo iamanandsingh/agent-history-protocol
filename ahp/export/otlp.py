@@ -8,7 +8,7 @@ Uses HTTP/JSON (not gRPC) for simplicity -- no protobuf dependency needed.
 from __future__ import annotations
 
 import json
-from typing import Optional, List, Dict, Any
+from typing import List
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 

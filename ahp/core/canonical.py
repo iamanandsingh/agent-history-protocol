@@ -7,7 +7,6 @@ across all implementations for the same logical record.
 """
 
 import struct
-from ahp.core.types import RecordType
 from ahp.core.records import (
     Record, ActionPayload, GapPayload, CheckpointPayload,
     BootPayload, RecoveryPayload, KeyPayload, WitnessPayload,

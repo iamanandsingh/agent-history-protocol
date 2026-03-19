@@ -19,7 +19,6 @@ from urllib.error import URLError
 
 from ahp.core.types import (
     ResultStatus, Protocol, ActionType, AuthorizationType,
-    AuthorizerType, AuthorizationDecision,
 )
 from ahp.core.records import ActionPayload, Authorization
 from ahp.core.chain import ChainWriter

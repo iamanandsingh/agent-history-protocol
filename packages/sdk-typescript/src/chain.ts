@@ -18,13 +18,9 @@ import {
   SCHEMA_VERSION,
   GapReason,
   RecoveryMethod,
-  GapPayload,
-  RecoveryPayload,
-  CheckpointPayload,
   createGapPayload,
   createRecoveryPayload,
   createCheckpointPayload,
-  createRecord,
 } from "./types";
 import { canonicalBytes, parseEnvelope } from "./canonical";
 import { uuid7 } from "./uuid7";
@@ -82,22 +78,31 @@ export class ChainWriter {
   private _recordCount = 0;
   private _gapCount = 0;
   private _fsyncMode: string;
+  private _fsyncBatchSize: number;
   private _writesSinceFsync = 0;
+  private _fd: number | null = null;
+  private _bytesWritten = 0;
 
   constructor(
     path: string,
     agentId?: Uint8Array,
     sessionId?: Uint8Array,
-    fsyncMode: string = "batch"
+    fsyncMode: string = "batch",
+    fsyncBatchSize: number = 1000
   ) {
     this.path = path;
     this.agentId = agentId ?? uuid7();
     this.sessionId = sessionId ?? uuid7();
     this._fsyncMode = fsyncMode;
+    this._fsyncBatchSize = fsyncBatchSize;
 
     if (!fs.existsSync(path)) {
       this._writeHeader();
     }
+
+    // Initialize in-memory byte counter and open persistent handle
+    this._bytesWritten = fs.statSync(this.path).size;
+    this._fd = fs.openSync(this.path, "a");
   }
 
   private _writeHeader(): void {
@@ -151,31 +156,34 @@ export class ChainWriter {
     }
 
     // Write to file: [length][canonical_bytes][crc32]
-    // NOTE: File-level locking is not implemented in the TS SDK.
-    // Concurrent writers to the same file are NOT supported.
+    // Uses persistent file handle and single batched write for performance.
+    // NOTE: Concurrent writers to the same file are NOT supported.
+    const oldBytesWritten = this._bytesWritten;
     try {
       const lengthBuf = uint32LEBuffer(stored.length);
       const crcInput = Buffer.concat([lengthBuf, stored]);
       const crcValue = crc32(crcInput);
       const crcBuf = uint32LEBuffer(crcValue);
 
-      const fd = fs.openSync(this.path, "a");
-      try {
-        fs.writeSync(fd, lengthBuf);
-        fs.writeSync(fd, stored);
-        fs.writeSync(fd, crcBuf);
+      // Single concatenated write instead of 3 separate writeSync calls
+      const frame = Buffer.concat([lengthBuf, stored, crcBuf]);
 
-        // fsync per spec Section 10.1
-        this._writesSinceFsync += 1;
-        if (this._fsyncMode === "every") {
-          fs.fsyncSync(fd);
-          this._writesSinceFsync = 0;
-        } else if (this._fsyncMode === "batch" && this._writesSinceFsync >= 100) {
-          fs.fsyncSync(fd);
-          this._writesSinceFsync = 0;
-        }
-      } finally {
-        fs.closeSync(fd);
+      // Reopen persistent handle if lost
+      if (this._fd === null) {
+        this._fd = fs.openSync(this.path, "a");
+      }
+
+      fs.writeSync(this._fd, frame);
+      this._bytesWritten += frame.length;
+
+      // fsync per spec Section 10.1
+      this._writesSinceFsync += 1;
+      if (this._fsyncMode === "every") {
+        fs.fsyncSync(this._fd);
+        this._writesSinceFsync = 0;
+      } else if (this._fsyncMode === "batch" && this._writesSinceFsync >= this._fsyncBatchSize) {
+        fs.fsyncSync(this._fd);
+        this._writesSinceFsync = 0;
       }
     } catch (e) {
       // Rollback in-memory state so the chain stays consistent
@@ -183,6 +191,7 @@ export class ChainWriter {
       this._sequence = oldSequence;
       this._recordCount = oldRecordCount;
       this._gapCount = oldGapCount;
+      this._bytesWritten = oldBytesWritten;
       throw e;
     }
 
@@ -257,6 +266,17 @@ export class ChainWriter {
 
   get gapCount(): number {
     return this._gapCount;
+  }
+
+  get bytesWritten(): number {
+    return this._bytesWritten;
+  }
+
+  close(): void {
+    if (this._fd !== null) {
+      try { fs.closeSync(this._fd); } catch { /* ignore */ }
+      this._fd = null;
+    }
   }
 }
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from ahp.core.types import ZERO_HASH_32, RecordType
+from ahp.core.types import ZERO_HASH_32
 from ahp.core.chain import MAGIC, HEADER_SIZE, parse_envelope
 from ahp.core.validation import MAX_RECORD_SIZE
 

@@ -8,14 +8,20 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
-import * as os from "os";
 
 export class EvidenceStore {
   readonly path: string;
+  private _fileCount: number;
 
   constructor(storePath: string = "evidence") {
     this.path = storePath;
     fs.mkdirSync(this.path, { recursive: true });
+    // Initialize in-memory count from directory (eliminates O(n) scan per count())
+    try {
+      this._fileCount = fs.readdirSync(this.path).filter((f) => !f.startsWith(".")).length;
+    } catch {
+      this._fileCount = 0;
+    }
   }
 
   /**
@@ -47,6 +53,7 @@ export class EvidenceStore {
       fs.closeSync(tmpFd);
       tmpFd = null;
       fs.renameSync(tmpPath, filepath);
+      this._fileCount += 1;
     } catch (e) {
       if (tmpFd !== null) {
         try {
@@ -98,11 +105,6 @@ export class EvidenceStore {
    * Count evidence files by status.
    */
   count(): { available: number; missing: number } {
-    try {
-      const files = fs.readdirSync(this.path).filter((f) => !f.startsWith("."));
-      return { available: files.length, missing: 0 };
-    } catch {
-      return { available: 0, missing: 0 };
-    }
+    return { available: this._fileCount, missing: 0 };
   }
 }

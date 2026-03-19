@@ -7,7 +7,7 @@ from ahp.core.types import (
     RecordType, ResultStatus, Protocol, ActionType,
     AuthorizationType, AuthorizerType, AuthorizationDecision,
     GapReason, ChainLevel, FsyncMode, RecoveryMethod,
-    ZERO_UUID, ZERO_HASH_16,
+    ZERO_UUID,
 )
 from ahp.core.chain import (
     parse_envelope, parse_action_payload, parse_boot_payload,

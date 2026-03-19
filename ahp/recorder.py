@@ -40,13 +40,11 @@ from ahp.core.records import (
 )
 from ahp.core.signing import sign
 from ahp.core.types import (
-    RecordType,
     ResultStatus,
     Protocol,
     ActionType,
     AuthorizationType,
     GapReason,
-    ZERO_HASH_32,
     ZERO_UUID,
 )
 from ahp.core.witness_client import send_checkpoint as _send_checkpoint
@@ -206,21 +204,18 @@ class AHPRecorder(RecorderBase):
 
         Returns the :class:`Record` written to the chain.
         """
+        # Phase 1: Outside lock — pure computation + idempotent I/O
+        param_hash, result_hash, filtered_params, filtered_result, redacted = (
+            self._filter_action_payloads(parameters, result)
+        )
+        evidence_uri = self._store_evidence(
+            filtered_params, filtered_result, param_hash
+        )
+
+        # Phase 2: Inside lock — state mutations only
         with self._recorder_lock:
-            # 0. If there is a pending gap from a previous failure, emit it first.
             self._flush_pending_gap()
 
-            # 1. Apply PII filters (shared logic from base)
-            param_hash, result_hash, filtered_params, filtered_result, redacted = (
-                self._filter_action_payloads(parameters, result)
-            )
-
-            # 2. Store evidence if configured (shared logic from base)
-            evidence_uri = self._store_evidence(
-                filtered_params, filtered_result, param_hash
-            )
-
-            # 3. Build payload
             payload = ActionPayload(
                 parent_action_id=parent_action_id,
                 tool_name=tool_name,
@@ -239,17 +234,12 @@ class AHPRecorder(RecorderBase):
                 authorization=authorization or Authorization(type=AuthorizationType.AUTH_NONE),
             )
 
-            # 4. Write to chain (thread-safe via ChainWriter lock)
             record = self._chain.write_record(payload)
-
-            # 5. Track checkpoint state (shared logic from base)
             self._track_record(record)
 
-            # 6. Auto-checkpoint
             if self._records_since_checkpoint >= self._checkpoint_interval:
                 self.emit_checkpoint()
 
-            # 7. Auto-witness (level 3 only)
             if (
                 self._level >= 3
                 and self._witness_endpoints
@@ -257,7 +247,6 @@ class AHPRecorder(RecorderBase):
             ):
                 self.send_witness_checkpoint()
 
-            # 8. Auto-rotate if chain exceeds 64MB
             self._check_rotation()
 
             return record
@@ -503,10 +492,7 @@ class AHPRecorder(RecorderBase):
 
     def _check_rotation(self) -> None:
         """Rotate the chain file if it exceeds 64MB."""
-        try:
-            chain_size = Path(self._chain_path).stat().st_size
-        except OSError:
-            return
+        chain_size = self._chain.bytes_written
 
         if chain_size < self._max_segment_bytes:
             return

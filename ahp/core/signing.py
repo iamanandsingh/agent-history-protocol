@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List
 
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey

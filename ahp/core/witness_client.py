@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
@@ -55,17 +55,3 @@ def get_identity(endpoint: str) -> Optional[Dict]:
     except (URLError, OSError) as e:
         logger.warning("Witness identity request failed: %s", e)
         return None
-
-
-def get_receipts_for_agent(endpoint: str, agent_id: str) -> List[Dict]:
-    """Get all receipts for an agent from a witness."""
-    if not endpoint.startswith("https://") and not endpoint.startswith("http://localhost") and not endpoint.startswith("http://127.0.0.1"):
-        raise ValueError(f"Witness endpoint must use HTTPS: {endpoint}")
-    url = endpoint.rstrip('/') + '/ahp/v1/agents/%s/checkpoints' % agent_id
-    try:
-        req = Request(url)
-        with urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read())
-    except (URLError, OSError) as e:
-        logger.warning("Witness receipts request failed: %s", e)
-        return []

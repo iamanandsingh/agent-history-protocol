@@ -15,8 +15,6 @@ from ahp.config import AHPConfig, WitnessConfig
 from ahp.core.evidence import EvidenceStore
 from ahp.core.filters import Filter, FilterPipeline
 from ahp.core.records import (
-    ActionPayload,
-    Authorization,
     BootPayload,
     CheckpointPayload,
     KeyPayload,
@@ -30,10 +28,8 @@ from ahp.core.signing import (
     HAS_CRYPTO,
 )
 from ahp.core.types import (
-    AuthorizationType,
     ChainLevel,
     FsyncMode,
-    ZERO_HASH_16,
     ZERO_HASH_32,
 )
 

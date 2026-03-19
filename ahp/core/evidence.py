@@ -29,11 +29,15 @@ class EvidenceStore:
         path: str = "evidence",
         max_size_bytes: Optional[int] = None,
         max_age_seconds: Optional[int] = None,
+        cleanup_interval: int = 100,
     ):
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
         self._max_size_bytes = max_size_bytes
         self._max_age_seconds = max_age_seconds
+        self._cleanup_interval = cleanup_interval
+        self._stores_since_cleanup = 0
+        self._file_count = sum(1 for f in self.path.iterdir() if f.is_file())
 
     @property
     def max_size_bytes(self) -> Optional[int]:
@@ -75,6 +79,7 @@ class EvidenceStore:
             os.close(fd)
             fd_closed = True
             os.rename(tmp, str(filepath))
+            self._file_count += 1
         except BaseException:
             if not fd_closed:
                 try:
@@ -87,9 +92,12 @@ class EvidenceStore:
                 pass
             raise
 
-        # Auto-cleanup if limits are configured
+        # Auto-cleanup if limits are configured (throttled by cleanup_interval)
         if self._max_size_bytes is not None or self._max_age_seconds is not None:
-            self.cleanup()
+            self._stores_since_cleanup += 1
+            if self._stores_since_cleanup >= self._cleanup_interval:
+                self.cleanup()
+                self._stores_since_cleanup = 0
 
         return truncated
 
@@ -109,10 +117,9 @@ class EvidenceStore:
         return actual == hash_16
 
     def count(self) -> dict:
-        """Count evidence files by status."""
-        files = list(self.path.iterdir())
+        """Count evidence files by status (in-memory, no directory scan)."""
         return {
-            'available': len(files),
+            'available': self._file_count,
             'missing': 0,  # would need chain scan to determine
         }
 
@@ -183,6 +190,7 @@ class EvidenceStore:
                     continue
 
         if removed > 0:
+            self._file_count -= removed
             logger.info("Evidence cleanup: removed %d files", removed)
 
         return removed
