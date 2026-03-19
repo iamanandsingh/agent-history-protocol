@@ -29,7 +29,7 @@ _original_urlopen = None  # type: Optional[Any]
 _recorder = None  # type: Optional[Any]
 
 # The sentinel that urllib.request.urlopen uses for the default timeout.
-_GLOBAL_DEFAULT_TIMEOUT = socket._GLOBAL_DEFAULT_TIMEOUT
+_GLOBAL_DEFAULT_TIMEOUT = socket._GLOBAL_DEFAULT_TIMEOUT  # type: ignore[attr-defined]
 
 
 class _ReadableResponse:

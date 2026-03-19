@@ -318,9 +318,10 @@ class RecorderBase:
 
     def _log_warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log a warning with structured context fields."""
+        _chain = getattr(self, "_chain", None)
         extra = {
-            "agent_id": getattr(self, "_chain", None) and getattr(self._chain, "agent_id", b"").hex() or "",
-            "session_id": getattr(self, "_chain", None) and getattr(self._chain, "session_id", b"").hex() or "",
+            "agent_id": _chain and getattr(_chain, "agent_id", b"").hex() or "",
+            "session_id": _chain and getattr(_chain, "session_id", b"").hex() or "",
             "record_count": self._records_since_checkpoint,
         }
         logger.warning(

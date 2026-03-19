@@ -12,7 +12,7 @@ from __future__ import annotations
 import base64
 import os
 import struct
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 def generate_trace_id() -> bytes:
@@ -38,7 +38,7 @@ def create_traceparent(trace_id: bytes, span_id: Optional[bytes] = None, sampled
     return f"{version}-{tid}-{sid}-{flags}"
 
 
-def parse_traceparent(header: str) -> Optional[Dict[str, bytes]]:
+def parse_traceparent(header: str) -> Optional[Dict[str, Any]]:
     """Parse a W3C traceparent header.
 
     Returns dict with trace_id (16 bytes), span_id (8 bytes), sampled (bool)

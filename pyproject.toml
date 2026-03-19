@@ -77,7 +77,6 @@ warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
 exclude = ["_pytest"]
-disable_error_code = ["attr-defined", "no-any-return", "override", "union-attr", "arg-type", "no-redef", "dict-item", "assignment"]
 
 [[tool.mypy.overrides]]
 module = ["_pytest", "_pytest.*"]

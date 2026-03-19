@@ -79,7 +79,7 @@ class AHPCallbackHandler(_LCBase):
     # Tool callbacks
     # ------------------------------------------------------------------
 
-    def on_tool_start(
+    def on_tool_start(  # type: ignore[override]
         self,
         serialized: Dict[str, Any],
         input_str: str,
@@ -91,7 +91,7 @@ class AHPCallbackHandler(_LCBase):
         self._tool_starts[key] = time.time()
         self._tool_inputs[key] = input_str
 
-    def on_tool_end(
+    def on_tool_end(  # type: ignore[override]
         self,
         output: str,
         run_id: Optional[str] = None,
@@ -129,7 +129,7 @@ class AHPCallbackHandler(_LCBase):
                 duration_ms,
             )
 
-    def on_tool_error(
+    def on_tool_error(  # type: ignore[override]
         self,
         error: BaseException,
         run_id: Optional[str] = None,
@@ -169,7 +169,7 @@ class AHPCallbackHandler(_LCBase):
     # LLM callbacks
     # ------------------------------------------------------------------
 
-    def on_llm_start(
+    def on_llm_start(  # type: ignore[override]
         self,
         serialized: Dict[str, Any],
         prompts: List[str],
@@ -182,7 +182,7 @@ class AHPCallbackHandler(_LCBase):
         # Store the prompts for evidence recording
         self._llm_prompts[key] = json.dumps(prompts)
 
-    def on_llm_end(
+    def on_llm_end(  # type: ignore[override]
         self,
         response: Any,
         run_id: Optional[str] = None,
@@ -235,7 +235,7 @@ class AHPCallbackHandler(_LCBase):
                 output_tokens,
             )
 
-    def on_llm_error(
+    def on_llm_error(  # type: ignore[override]
         self,
         error: BaseException,
         run_id: Optional[str] = None,
@@ -275,7 +275,7 @@ class AHPCallbackHandler(_LCBase):
     # Chain callbacks (for agent reasoning chains)
     # ------------------------------------------------------------------
 
-    def on_chain_start(
+    def on_chain_start(  # type: ignore[override]
         self,
         serialized: Dict[str, Any],
         inputs: Dict[str, Any],
@@ -285,7 +285,7 @@ class AHPCallbackHandler(_LCBase):
         """Called when a LangChain chain starts. Recorded as a delegation."""
         pass  # Start timing tracked via run_id if needed
 
-    def on_chain_end(
+    def on_chain_end(  # type: ignore[override]
         self,
         outputs: Dict[str, Any],
         run_id: Optional[str] = None,

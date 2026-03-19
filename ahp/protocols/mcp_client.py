@@ -86,7 +86,7 @@ class MCPClient:
         duration_ms = int((time.time() - start) * 1000)
 
         # Parse JSON-RPC response
-        tool_result = None
+        tool_result: Any = None
         try:
             rpc_response = json.loads(response_bytes)
             if "error" in rpc_response:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 # Use PCRE2-compatible regex if available, fall back to stdlib re
 try:
@@ -24,7 +24,7 @@ class Filter:
     pattern: str
     replacement: str
     scope: List[str] = field(default_factory=lambda: ["parameters", "results"])
-    _compiled: Optional[object] = field(default=None, repr=False)
+    _compiled: Optional[Any] = field(default=None, repr=False)
 
     def compile(self) -> None:
         self._compiled = re_engine.compile(self.pattern)
@@ -33,6 +33,7 @@ class Filter:
         """Apply filter. Returns (filtered_text, did_match)."""
         if self._compiled is None:
             self.compile()
+        assert self._compiled is not None
         result, count = self._compiled.subn(self.replacement, text)
         return result, count > 0
 

@@ -118,3 +118,6 @@ jobs:
 
       - name: Run tests
         run: node --test dist/*.test.js
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high

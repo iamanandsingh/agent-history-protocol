@@ -153,15 +153,18 @@ class AsyncChainWriter:
 
     async def _drain_loop(self) -> None:
         """Background: drain queue and write records to disk (non-blocking)."""
-        while self._running or (self._queue and not self._queue.empty()):
+        if self._queue is None:
+            return
+        queue = self._queue
+        while self._running or not queue.empty():
             try:
-                stored = await asyncio.wait_for(self._queue.get(), timeout=0.1)
+                stored = await asyncio.wait_for(queue.get(), timeout=0.1)
             except asyncio.TimeoutError:
-                if not self._running and self._queue.empty():
+                if not self._running and queue.empty():
                     break
                 continue
             except asyncio.CancelledError:
-                pending = self._queue.qsize() if self._queue else 0
+                pending = queue.qsize()
                 if pending > 0:
                     import logging
 
@@ -171,7 +174,7 @@ class AsyncChainWriter:
                 break
 
             await asyncio.to_thread(self._write_to_file, stored)
-            self._queue.task_done()
+            queue.task_done()
 
     def _write_to_file(self, stored: bytes) -> None:
         """Synchronous disk write — runs in a thread via asyncio.to_thread."""

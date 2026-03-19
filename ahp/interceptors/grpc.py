@@ -131,7 +131,7 @@ if HAS_GRPC:
                 raise
 else:
 
-    class AHPClientInterceptor:
+    class AHPClientInterceptor:  # type: ignore[no-redef]
         """Stub when grpcio is not installed."""
 
         def __init__(self, *args: Any, **kwargs: Any):
