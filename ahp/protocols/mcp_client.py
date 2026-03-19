@@ -71,12 +71,12 @@ class MCPClient:
             with urlopen(req, timeout=10) as resp:
                 response_bytes = resp.read()
                 status_code = resp.status
-        except URLError as e:
-            response_bytes = json.dumps({"error": str(e)}).encode()
+        except URLError:
+            response_bytes = json.dumps({"error": "Connection failed"}).encode()
             status_code = 500
             success = False
-        except Exception as e:
-            response_bytes = json.dumps({"error": str(e)}).encode()
+        except Exception:
+            response_bytes = json.dumps({"error": "Request failed"}).encode()
             status_code = 500
             success = False
 

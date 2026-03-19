@@ -98,7 +98,6 @@ jobs:
 
       - name: Run pip-audit
         run: pip-audit
-        continue-on-error: true
 
   test-typescript:
     runs-on: ubuntu-latest
@@ -118,4 +117,4 @@ jobs:
         run: npm run build
 
       - name: Run tests
-        run: npm test
+        run: node --test dist/**/*.test.js

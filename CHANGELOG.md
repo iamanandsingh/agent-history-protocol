@@ -5,6 +5,26 @@ All notable changes to the Agent History Protocol (AHP) project will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Sanitized exception messages in API responses to prevent information disclosure.
+- Added security headers (X-Content-Type-Options) to all HTTP server responses.
+- Fixed private key file creation to use restricted permissions atomically.
+- Added logging to witness client for connection failures.
+- AsyncChainWriter now logs pending records when drain loop is cancelled.
+- Removed ~30 unused imports and dead code across Python and TypeScript SDKs.
+- Deduplicated CRC32 implementation in TypeScript SDK.
+- Fixed Node.js v25 compatibility (Object.freeze on typed arrays).
+
+### Removed
+- Removed orphaned benchmarks/ directory.
+- Removed redundant documentation files (ahp-deep-summary.md, duplicate index.html).
+- Removed broken CI benchmark step.
+
+### Added
+- CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md governance files.
+
 ## [0.1.0-alpha] - 2026-03-18
 
 ### Added

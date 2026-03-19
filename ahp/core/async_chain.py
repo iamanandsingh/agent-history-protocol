@@ -148,10 +148,18 @@ class AsyncChainWriter:
         while self._running or (self._queue and not self._queue.empty()):
             try:
                 stored = await asyncio.wait_for(self._queue.get(), timeout=0.1)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except asyncio.TimeoutError:
                 if not self._running and self._queue.empty():
                     break
                 continue
+            except asyncio.CancelledError:
+                pending = self._queue.qsize() if self._queue else 0
+                if pending > 0:
+                    import logging
+                    logging.getLogger("ahp.async_chain").warning(
+                        "Drain loop cancelled with %d pending records", pending
+                    )
+                break
 
             await asyncio.to_thread(self._write_to_file, stored)
             self._queue.task_done()

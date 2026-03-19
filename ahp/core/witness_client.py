@@ -1,10 +1,13 @@
 """Witness client — sends checkpoints to witness servers (Section 8)."""
 from __future__ import annotations
 import json
+import logging
 import time
 from typing import Optional, Dict, List
 from urllib.request import urlopen, Request
 from urllib.error import URLError
+
+logger = logging.getLogger("ahp.witness_client")
 
 
 def send_checkpoint(endpoint: str, agent_id: str, chain_hash: str,
@@ -31,7 +34,8 @@ def send_checkpoint(endpoint: str, agent_id: str, chain_hash: str,
             req = Request(url, data=payload, headers={'Content-Type': 'application/json'})
             with urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read())
-        except (URLError, OSError, json.JSONDecodeError):
+        except (URLError, OSError, json.JSONDecodeError) as e:
+            logger.warning("Witness checkpoint attempt %d/%d failed: %s", attempt + 1, retries, e)
             if attempt < retries - 1:
                 time.sleep(delays[attempt])
             else:
@@ -48,7 +52,8 @@ def get_identity(endpoint: str) -> Optional[Dict]:
         req = Request(url)
         with urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
-    except (URLError, OSError):
+    except (URLError, OSError) as e:
+        logger.warning("Witness identity request failed: %s", e)
         return None
 
 
@@ -61,5 +66,6 @@ def get_receipts_for_agent(endpoint: str, agent_id: str) -> List[Dict]:
         req = Request(url)
         with urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
-    except (URLError, OSError):
+    except (URLError, OSError) as e:
+        logger.warning("Witness receipts request failed: %s", e)
         return []

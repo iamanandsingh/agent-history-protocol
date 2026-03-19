@@ -457,13 +457,11 @@ def cmd_keygen() -> None:
     kp = generate_keypair()
 
     pub_path.write_text(kp.public_key_bytes.hex() + '\n')
-    priv_path.write_text(kp.private_key_bytes.hex() + '\n')
 
-    # Try to restrict permissions on the private key file
-    try:
-        os.chmod(str(priv_path), 0o600)
-    except OSError:
-        pass
+    # Create private key with restricted permissions from the start
+    fd = os.open(str(priv_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        f.write(kp.private_key_bytes.hex() + '\n')
 
     key_id_hex = kp.key_id.hex()
     print(f"Ed25519 keypair generated.")

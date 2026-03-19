@@ -6,9 +6,18 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "node --test src/**/*.test.ts"
+    "test": "node --test dist/**/*.test.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iamanandsingh/agent-history-protocol.git",
+    "directory": "packages/sdk-typescript"
+  },
+  "homepage": "https://github.com/iamanandsingh/agent-history-protocol",
+  "keywords": ["ahp", "audit", "protocol", "agent", "history", "tamper-evident"],
+  "author": "AHP Contributors",
   "license": "Apache-2.0",
+  "files": ["dist", "README.md", "LICENSE"],
   "engines": {
     "node": ">=18.0.0"
   },

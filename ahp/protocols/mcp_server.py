@@ -56,10 +56,10 @@ class MCPToolServer:
                                 "jsonrpc": "2.0", "id": req_id,
                                 "result": {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
                             }
-                        except Exception as e:
+                        except Exception:
                             response = {
                                 "jsonrpc": "2.0", "id": req_id,
-                                "error": {"code": -32000, "message": str(e)}
+                                "error": {"code": -32000, "message": "Tool execution failed"}
                             }
                 else:
                     response = {
@@ -71,6 +71,7 @@ class MCPToolServer:
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(resp_bytes)))
+                self.send_header('X-Content-Type-Options', 'nosniff')
                 self.end_headers()
                 self.wfile.write(resp_bytes)
 

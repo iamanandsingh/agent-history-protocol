@@ -116,7 +116,7 @@ if HAS_GRPC:
 
             except grpc.RpcError as e:
                 duration_ms = int((time.time() - start) * 1000)
-                error_bytes = str(e).encode()
+                error_bytes = b'gRPC call failed'
 
                 action = create_action_from_grpc(
                     service_name=service_name,

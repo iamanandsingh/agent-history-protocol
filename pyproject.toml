@@ -52,8 +52,12 @@ dev = [
 ahp = "ahp.cli.main:main"
 
 [project.urls]
-Repository = "https://github.com/ahp-protocol/ahp"
-Specification = "https://github.com/ahp-protocol/ahp/blob/main/agent-history-protocol-spec.md"
+Homepage = "https://github.com/iamanandsingh/agent-history-protocol"
+Repository = "https://github.com/iamanandsingh/agent-history-protocol"
+Documentation = "https://github.com/iamanandsingh/agent-history-protocol#readme"
+"Bug Tracker" = "https://github.com/iamanandsingh/agent-history-protocol/issues"
+Changelog = "https://github.com/iamanandsingh/agent-history-protocol/blob/main/CHANGELOG.md"
+Specification = "https://github.com/iamanandsingh/agent-history-protocol/blob/main/agent-history-protocol-spec.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ahp"]

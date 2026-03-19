@@ -258,8 +258,8 @@ class A2AClient:
             with urlopen(req, timeout=15) as resp:
                 response_bytes = resp.read()
                 status_code = resp.status
-        except (URLError, Exception) as e:
-            response_bytes = json.dumps({"error": str(e)}).encode()
+        except (URLError, Exception):
+            response_bytes = json.dumps({"error": "A2A request failed"}).encode()
             status_code = 500
 
         duration_ms = int((time.time() - start) * 1000)
