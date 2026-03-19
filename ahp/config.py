@@ -2,6 +2,7 @@
 
 Implements Section 10 of the AHP specification.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -11,12 +12,13 @@ import os
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("ahp.config")
 
 try:
     import yaml
+
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
@@ -40,6 +42,7 @@ class WitnessConfig:
 @dataclass
 class AHPConfig:
     """Complete AHP configuration per Section 10."""
+
     # Recording policy
     level: int = 1  # 1-3
     inference_record: bool = True
@@ -103,9 +106,7 @@ def load_config(path: Optional[str] = None, agent_name: str = "") -> AHPConfig:
     # Validate before returning — raise on invalid configs
     errors = config.validate()
     if errors:
-        raise ValueError(
-            "Invalid AHP configuration:\n  - " + "\n  - ".join(errors)
-        )
+        raise ValueError("Invalid AHP configuration:\n  - " + "\n  - ".join(errors))
 
     return config
 
@@ -204,12 +205,14 @@ def _parse_raw_config(raw: Dict[str, Any], agent_name: str) -> AHPConfig:
         if "preset" in f_raw:
             config.filter_presets.append(f_raw["preset"])
         else:
-            config.filters.append(FilterConfig(
-                name=f_raw.get("name", ""),
-                pattern=f_raw.get("pattern", ""),
-                replacement=f_raw.get("replacement", ""),
-                scope=f_raw.get("scope", ["parameters", "results"]),
-            ))
+            config.filters.append(
+                FilterConfig(
+                    name=f_raw.get("name", ""),
+                    pattern=f_raw.get("pattern", ""),
+                    replacement=f_raw.get("replacement", ""),
+                    scope=f_raw.get("scope", ["parameters", "results"]),
+                )
+            )
 
     # Per-agent overrides (first match wins)
     for agent_rule in raw.get("agents", []):
@@ -251,9 +254,11 @@ def _apply_overrides(config: AHPConfig, overrides: Dict[str, Any]) -> None:
 
     # Agent-level filters are APPENDED (not replaced)
     for f_raw in overrides.get("filters", []):
-        config.filters.append(FilterConfig(
-            name=f_raw.get("name", ""),
-            pattern=f_raw.get("pattern", ""),
-            replacement=f_raw.get("replacement", ""),
-            scope=f_raw.get("scope", ["parameters", "results"]),
-        ))
+        config.filters.append(
+            FilterConfig(
+                name=f_raw.get("name", ""),
+                pattern=f_raw.get("pattern", ""),
+                replacement=f_raw.get("replacement", ""),
+                scope=f_raw.get("scope", ["parameters", "results"]),
+            )
+        )

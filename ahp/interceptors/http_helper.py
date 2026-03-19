@@ -1,23 +1,27 @@
 """HTTP interceptor — auto-captures HTTP calls and LLM API requests."""
+
 from __future__ import annotations
 
 import hashlib
 import re
-from typing import Optional, Callable, Any, Dict, List, Tuple
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
+from typing import Any, Optional, Tuple
+
 from ahp.core.records import ActionPayload, Authorization
+from ahp.core.types import ActionType, AuthorizationType, Protocol, ResultStatus
 
 # LLM API endpoint patterns — auto-detect INFERENCE
 LLM_PATTERNS = [
-    (re.compile(r'api\.openai\.com/v\d+/chat/completions'), 'openai.chat.completions'),
-    (re.compile(r'api\.anthropic\.com/v\d+/messages'), 'anthropic.messages'),
-    (re.compile(r'generativelanguage\.googleapis\.com'), 'google.generateContent'),
-    (re.compile(r'api\.cohere\.ai/v\d+/chat'), 'cohere.chat'),
-    (re.compile(r'api\.mistral\.ai'), 'mistral.chat'),
+    (re.compile(r"api\.openai\.com/v\d+/chat/completions"), "openai.chat.completions"),
+    (re.compile(r"api\.anthropic\.com/v\d+/messages"), "anthropic.messages"),
+    (re.compile(r"generativelanguage\.googleapis\.com"), "google.generateContent"),
+    (re.compile(r"api\.cohere\.ai/v\d+/chat"), "cohere.chat"),
+    (re.compile(r"api\.mistral\.ai"), "mistral.chat"),
 ]
+
 
 def _hash16(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()[:16]
+
 
 def _detect_llm(url: str) -> Optional[str]:
     """Check if URL matches known LLM API endpoints. Returns tool_name or None."""
@@ -26,37 +30,42 @@ def _detect_llm(url: str) -> Optional[str]:
             return name
     return None
 
+
 def _extract_model_id(body: bytes) -> str:
     """Try to extract model ID from request body."""
     try:
         import json
+
         data = json.loads(body)
-        return data.get('model', '')
+        return data.get("model", "")
     except Exception:
-        return ''
+        return ""
+
 
 def _extract_tokens(body: bytes) -> Tuple[int, int]:
     """Try to extract token counts from LLM response (OpenAI, Anthropic, Gemini)."""
     try:
         import json
+
         data = json.loads(body)
         # OpenAI/Anthropic format
-        usage = data.get('usage', {})
+        usage = data.get("usage", {})
         if usage:
             return (
-                usage.get('input_tokens', usage.get('prompt_tokens', 0)),
-                usage.get('output_tokens', usage.get('completion_tokens', 0)),
+                usage.get("input_tokens", usage.get("prompt_tokens", 0)),
+                usage.get("output_tokens", usage.get("completion_tokens", 0)),
             )
         # Gemini format
-        usage_meta = data.get('usageMetadata', {})
+        usage_meta = data.get("usageMetadata", {})
         if usage_meta:
             return (
-                usage_meta.get('promptTokenCount', 0),
-                usage_meta.get('candidatesTokenCount', 0),
+                usage_meta.get("promptTokenCount", 0),
+                usage_meta.get("candidatesTokenCount", 0),
             )
         return 0, 0
     except Exception:
         return 0, 0
+
 
 def create_action_from_http(
     method: str,
@@ -74,12 +83,12 @@ def create_action_from_http(
     # Apply PII filters if configured
     redacted = False
     if filter_pipeline:
-        params_hash, filtered_params, r1 = filter_pipeline.hash_payload(request_body, 'parameters')
-        result_hash, filtered_result, r2 = filter_pipeline.hash_payload(response_body, 'results')
+        params_hash, filtered_params, r1 = filter_pipeline.hash_payload(request_body, "parameters")
+        result_hash, filtered_result, r2 = filter_pipeline.hash_payload(response_body, "results")
         redacted = r1 or r2
     else:
-        params_hash = _hash16(request_body) if request_body else b'\x00' * 16
-        result_hash = _hash16(response_body) if response_body else b'\x00' * 16
+        params_hash = _hash16(request_body) if request_body else b"\x00" * 16
+        result_hash = _hash16(response_body) if response_body else b"\x00" * 16
 
     # Determine result status
     if status_code >= 200 and status_code < 300:
@@ -91,7 +100,7 @@ def create_action_from_http(
     else:
         result_status = ResultStatus.FAILURE
 
-    model_id = ''
+    model_id = ""
     input_tokens = 0
     output_tokens = 0
     if is_inference:

@@ -9,18 +9,20 @@ Usage (when grpcio is available):
         AHPClientInterceptor(writer)
     )
 """
+
 from __future__ import annotations
 
 import hashlib
 import time
-from typing import Optional, Any, Callable
+from typing import Any, Callable, Optional
 
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
-from ahp.core.records import ActionPayload, Authorization
 from ahp.core.chain import ChainWriter
+from ahp.core.records import ActionPayload, Authorization
+from ahp.core.types import ActionType, AuthorizationType, Protocol, ResultStatus
 
 try:
     import grpc
+
     HAS_GRPC = True
 except ImportError:
     HAS_GRPC = False
@@ -39,8 +41,8 @@ def create_action_from_grpc(
 
     Works regardless of whether grpcio is installed — just needs the call data.
     """
-    params_hash = hashlib.sha256(request_bytes).digest()[:16] if request_bytes else b'\x00' * 16
-    result_hash = hashlib.sha256(response_bytes).digest()[:16] if response_bytes else b'\x00' * 16
+    params_hash = hashlib.sha256(request_bytes).digest()[:16] if request_bytes else b"\x00" * 16
+    result_hash = hashlib.sha256(response_bytes).digest()[:16] if response_bytes else b"\x00" * 16
 
     return ActionPayload(
         tool_name=f"{service_name}/{method_name}",
@@ -56,6 +58,7 @@ def create_action_from_grpc(
 
 
 if HAS_GRPC:
+
     class AHPClientInterceptor(grpc.UnaryUnaryClientInterceptor):
         """gRPC client interceptor that records every call in AHP.
 
@@ -67,16 +70,14 @@ if HAS_GRPC:
             self.writer = writer
             self.session_id = session_id
 
-        def intercept_unary_unary(self, continuation: Callable,
-                                  client_call_details: Any,
-                                  request: Any) -> Any:
+        def intercept_unary_unary(self, continuation: Callable, client_call_details: Any, request: Any) -> Any:
             method = client_call_details.method
             if isinstance(method, bytes):
-                method = method.decode('utf-8')
+                method = method.decode("utf-8")
 
             # Extract service and method name from /package.Service/Method
-            parts = method.strip('/').rsplit('/', 1)
-            service_name = parts[0] if len(parts) > 1 else ''
+            parts = method.strip("/").rsplit("/", 1)
+            service_name = parts[0] if len(parts) > 1 else ""
             method_name = parts[1] if len(parts) > 1 else parts[0]
 
             # Serialize request
@@ -114,9 +115,9 @@ if HAS_GRPC:
 
                 return response
 
-            except grpc.RpcError as e:
+            except grpc.RpcError:
                 duration_ms = int((time.time() - start) * 1000)
-                error_bytes = b'gRPC call failed'
+                error_bytes = b"gRPC call failed"
 
                 action = create_action_from_grpc(
                     service_name=service_name,
@@ -129,10 +130,9 @@ if HAS_GRPC:
                 self.writer.write_record(action, session_id=self.session_id)
                 raise
 else:
+
     class AHPClientInterceptor:
         """Stub when grpcio is not installed."""
+
         def __init__(self, *args: Any, **kwargs: Any):
-            raise ImportError(
-                "grpcio is required for gRPC interception. "
-                "Install with: pip install grpcio"
-            )
+            raise ImportError("grpcio is required for gRPC interception. Install with: pip install grpcio")

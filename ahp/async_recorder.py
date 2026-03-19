@@ -10,22 +10,28 @@ Usage:
 
     await recorder.stop()
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, List, Any
+from typing import Any, Callable, List, Optional
 
 from ahp._base_recorder import RecorderBase
-from ahp.core.types import (
-    ResultStatus, Protocol, ActionType,
-    AuthorizationType, GapReason,
-)
-from ahp.core.records import (
-    ActionPayload, GapPayload,
-    Authorization, Record,
-)
-from ahp.core.async_chain import AsyncChainWriter
 from ahp.config import AHPConfig
+from ahp.core.async_chain import AsyncChainWriter
+from ahp.core.records import (
+    ActionPayload,
+    Authorization,
+    GapPayload,
+    Record,
+)
+from ahp.core.types import (
+    ActionType,
+    AuthorizationType,
+    GapReason,
+    Protocol,
+    ResultStatus,
+)
 
 logger = logging.getLogger("ahp.recorder")
 
@@ -37,14 +43,19 @@ class AsyncAHPRecorder(RecorderBase):
     Fail-open: never crashes the agent.
     """
 
-    def __init__(self, agent_name: str = "", chain_path: Optional[str] = None,
-                 level: int = 1, config: Optional[AHPConfig] = None,
-                 evidence_path: Optional[str] = None,
-                 filter_presets: Optional[List[str]] = None,
-                 checkpoint_interval: int = 1000,
-                 witness_endpoints: Optional[List[str]] = None,
-                 on_record_written: Optional[Callable[[Record], None]] = None,
-                 on_error: Optional[Callable[[Exception, str], None]] = None):
+    def __init__(
+        self,
+        agent_name: str = "",
+        chain_path: Optional[str] = None,
+        level: int = 1,
+        config: Optional[AHPConfig] = None,
+        evidence_path: Optional[str] = None,
+        filter_presets: Optional[List[str]] = None,
+        checkpoint_interval: int = 1000,
+        witness_endpoints: Optional[List[str]] = None,
+        on_record_written: Optional[Callable[[Record], None]] = None,
+        on_error: Optional[Callable[[Exception, str], None]] = None,
+    ):
 
         agent_name = agent_name or (config.agent_name if config else "") or "ahp-agent"
         path = chain_path or f"{agent_name}.ahp"
@@ -101,34 +112,37 @@ class AsyncAHPRecorder(RecorderBase):
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
 
-    async def record_action(self, tool_name: str = "",
-                            parameters: bytes = b'',
-                            result: bytes = b'',
-                            protocol: Protocol = Protocol.CUSTOM,
-                            action_type: ActionType = ActionType.TOOL_CALL,
-                            target_entity: str = "",
-                            model_id: str = "",
-                            input_token_count: int = 0,
-                            output_token_count: int = 0,
-                            authorization: Optional[Authorization] = None,
-                            parent_action_id: Optional[bytes] = None,
-                            session_id: Optional[bytes] = None,
-                            response_time_ms: int = 0) -> Optional[Record]:
+    async def record_action(
+        self,
+        tool_name: str = "",
+        parameters: bytes = b"",
+        result: bytes = b"",
+        protocol: Protocol = Protocol.CUSTOM,
+        action_type: ActionType = ActionType.TOOL_CALL,
+        target_entity: str = "",
+        model_id: str = "",
+        input_token_count: int = 0,
+        output_token_count: int = 0,
+        authorization: Optional[Authorization] = None,
+        parent_action_id: Optional[bytes] = None,
+        session_id: Optional[bytes] = None,
+        response_time_ms: int = 0,
+    ) -> Optional[Record]:
         """Record an action. Returns the Record or None on failure."""
         # Flush pending gap
         if self._pending_gap:
             await self._emit_pending_gap()
 
         # PII filtering (shared logic from base)
-        param_hash, result_hash, filtered_params, filtered_result, redacted = (
-            self._filter_action_payloads(parameters, result)
+        param_hash, result_hash, filtered_params, filtered_result, redacted = self._filter_action_payloads(
+            parameters, result
         )
 
         # Evidence (shared logic from base)
         self._store_evidence(filtered_params, filtered_result, param_hash)
 
         payload = ActionPayload(
-            parent_action_id=parent_action_id or b'\x00' * 16,
+            parent_action_id=parent_action_id or b"\x00" * 16,
             tool_name=tool_name,
             parameters_hash=param_hash,
             result_hash=result_hash,
@@ -155,14 +169,17 @@ class AsyncAHPRecorder(RecorderBase):
 
         return record
 
-    async def record_inference(self, tool_name: str = "",
-                               parameters: bytes = b'',
-                               result: bytes = b'',
-                               model_id: str = "",
-                               input_token_count: int = 0,
-                               output_token_count: int = 0,
-                               response_time_ms: int = 0,
-                               **kwargs: Any) -> Optional[Record]:
+    async def record_inference(
+        self,
+        tool_name: str = "",
+        parameters: bytes = b"",
+        result: bytes = b"",
+        model_id: str = "",
+        input_token_count: int = 0,
+        output_token_count: int = 0,
+        response_time_ms: int = 0,
+        **kwargs: Any,
+    ) -> Optional[Record]:
         """Record an LLM inference call."""
         return await self.record_action(
             tool_name=tool_name,
@@ -206,22 +223,25 @@ class AsyncAHPRecorder(RecorderBase):
         """Emit a GapRecord for a previously failed recording."""
         try:
             seq = self.writer.sequence
-            await self.writer.write_record(GapPayload(
-                first_lost_sequence=seq + 1,
-                last_lost_sequence=seq + 1,
-                count=1,
-                reason=GapReason.INTERCEPTOR_FAILURE,
-                detail=self._gap_detail,
-            ))
+            await self.writer.write_record(
+                GapPayload(
+                    first_lost_sequence=seq + 1,
+                    last_lost_sequence=seq + 1,
+                    count=1,
+                    reason=GapReason.INTERCEPTOR_FAILURE,
+                    detail=self._gap_detail,
+                )
+            )
             self._pending_gap = False
             self._gap_detail = ""
         except Exception:
             pass
 
     @classmethod
-    async def from_config(cls, config_path: str, agent_name: str = "") -> 'AsyncAHPRecorder':
+    async def from_config(cls, config_path: str, agent_name: str = "") -> "AsyncAHPRecorder":
         """Create from config file and start."""
         from ahp.config import load_config
+
         config = load_config(config_path, agent_name)
         recorder = cls(agent_name=agent_name, config=config)
         await recorder.start()

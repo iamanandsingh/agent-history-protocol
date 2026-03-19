@@ -86,8 +86,8 @@ class RecoveryMethod(IntEnum):
 
 
 # Sentinel for 32 zero bytes (genesis prev_hash)
-ZERO_HASH_32 = b'\x00' * 32
-ZERO_HASH_16 = b'\x00' * 16
-ZERO_UUID = b'\x00' * 16
+ZERO_HASH_32 = b"\x00" * 32
+ZERO_HASH_16 = b"\x00" * 16
+ZERO_UUID = b"\x00" * 16
 
 SCHEMA_VERSION = 1

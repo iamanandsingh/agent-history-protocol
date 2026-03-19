@@ -1,12 +1,13 @@
 """Chain verification — Section 5.4 of the AHP specification."""
 
 from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass
 from typing import Optional
 
-from ahp.core.types import RecordType, ZERO_HASH_32
 from ahp.core.chain import ChainReader, parse_envelope, parse_gap_payload
+from ahp.core.types import ZERO_HASH_32, RecordType
 
 
 @dataclass
@@ -41,9 +42,9 @@ def verify_chain(path: str) -> VerifyResult:
 
     for i, stored in enumerate(reader.iter_records()):
         envelope = parse_envelope(stored)
-        seq = envelope['sequence']
-        prev_hash = envelope['prev_hash']
-        record_type = envelope['record_type']
+        seq = envelope["sequence"]
+        prev_hash = envelope["prev_hash"]
+        record_type = envelope["record_type"]
 
         # Check hash chain
         if i == 0:
@@ -53,7 +54,7 @@ def verify_chain(path: str) -> VerifyResult:
                     records_checked=i + 1,
                     gaps=gaps,
                     broken_at=seq,
-                    error=f"Genesis record prev_hash is not zero bytes",
+                    error="Genesis record prev_hash is not zero bytes",
                 )
         else:
             expected_hash = hashlib.sha256(prev_stored).digest()
@@ -66,7 +67,7 @@ def verify_chain(path: str) -> VerifyResult:
                     expected_hash=expected_hash,
                     actual_hash=prev_hash,
                     error=f"Hash chain broken at record #{seq} (sequence {seq}). "
-                          f"Record #{seq - 1 if seq > 1 else 0} may have been modified.",
+                    f"Record #{seq - 1 if seq > 1 else 0} may have been modified.",
                 )
 
         # Check sequence
@@ -81,10 +82,10 @@ def verify_chain(path: str) -> VerifyResult:
                 )
 
             # Validate GapRecord payload constraints (Section 3.3)
-            gap_data = parse_gap_payload(envelope['payload_bytes'])
-            gap_first = gap_data['first_lost_sequence']
-            gap_last = gap_data['last_lost_sequence']
-            gap_count = gap_data['count']
+            gap_data = parse_gap_payload(envelope["payload_bytes"])
+            gap_first = gap_data["first_lost_sequence"]
+            gap_last = gap_data["last_lost_sequence"]
+            gap_count = gap_data["count"]
 
             if gap_first != expected_seq:
                 return VerifyResult(

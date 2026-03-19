@@ -3,27 +3,32 @@
 Makes actual JSON-RPC HTTP calls to an MCP tool server.
 AHP records the real HTTP request/response.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import time
-from typing import Optional, Any, Dict
-from urllib.request import urlopen, Request
+from typing import Any, Optional
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
-from ahp.core.records import ActionPayload, Authorization
 from ahp.core.chain import ChainWriter
+from ahp.core.records import ActionPayload, Authorization
+from ahp.core.types import ActionType, AuthorizationType, Protocol, ResultStatus
 from ahp.core.uuid7 import uuid7
 
 
 class MCPClient:
     """Calls MCP tools via JSON-RPC over HTTP. AHP intercepts every call."""
 
-    def __init__(self, server_url: str, writer: ChainWriter,
-                 session_id: Optional[bytes] = None,
-                 parent_record_id: Optional[bytes] = None):
+    def __init__(
+        self,
+        server_url: str,
+        writer: ChainWriter,
+        session_id: Optional[bytes] = None,
+        parent_record_id: Optional[bytes] = None,
+    ):
         self.server_url = server_url
         self.writer = writer
         self.session_id = session_id or uuid7()
@@ -38,8 +43,7 @@ class MCPClient:
         result = self._rpc_call("tools/list", {})
         return result.get("tools", []) if result else []
 
-    def call_tool(self, name: str, arguments: dict,
-                  authorization: Optional[Authorization] = None) -> Any:
+    def call_tool(self, name: str, arguments: dict, authorization: Optional[Authorization] = None) -> Any:
         """Call a tool on the MCP server via JSON-RPC. Returns the result.
 
         This makes a REAL HTTP call. AHP records the REAL request and response.
@@ -61,13 +65,12 @@ class MCPClient:
 
         # Make REAL HTTP call to MCP server
         start = time.time()
-        response_bytes = b''
+        response_bytes = b""
         status_code = 200
         success = True
 
         try:
-            req = Request(self.server_url, data=request_bytes,
-                         headers={"Content-Type": "application/json"})
+            req = Request(self.server_url, data=request_bytes, headers={"Content-Type": "application/json"})
             with urlopen(req, timeout=10) as resp:
                 response_bytes = resp.read()
                 status_code = resp.status
@@ -108,7 +111,7 @@ class MCPClient:
                 else:
                     tool_result = result_obj
         except (json.JSONDecodeError, KeyError, IndexError, TypeError):
-            tool_result = {"raw": response_bytes.decode('utf-8', errors='replace')}
+            tool_result = {"raw": response_bytes.decode("utf-8", errors="replace")}
 
         # Record in AHP — this is a REAL MCP protocol call
         params_hash = hashlib.sha256(request_bytes).digest()[:16]
@@ -143,16 +146,17 @@ class MCPClient:
     def _rpc_call(self, method: str, params: dict) -> Optional[dict]:
         """Raw JSON-RPC call."""
         self._req_id += 1
-        body = json.dumps({
-            "jsonrpc": "2.0",
-            "id": self._req_id,
-            "method": method,
-            "params": params,
-        }).encode()
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": self._req_id,
+                "method": method,
+                "params": params,
+            }
+        ).encode()
 
         try:
-            req = Request(self.server_url, data=body,
-                         headers={"Content-Type": "application/json"})
+            req = Request(self.server_url, data=body, headers={"Content-Type": "application/json"})
             with urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read()).get("result")
         except Exception:

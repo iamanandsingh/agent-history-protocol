@@ -6,12 +6,13 @@ for cross-agent linking. Compatible with OpenTelemetry.
 traceparent: standard W3C format (version-trace_id-parent_id-flags)
 tracestate: AHP data under key "ahp" as base64url(agent_id || sequence_be || chain_hash_16)
 """
+
 from __future__ import annotations
 
 import base64
 import os
 import struct
-from typing import Optional, Tuple, Dict
+from typing import Dict, Optional
 
 
 def generate_trace_id() -> bytes:
@@ -24,8 +25,7 @@ def generate_span_id() -> bytes:
     return os.urandom(8)
 
 
-def create_traceparent(trace_id: bytes, span_id: Optional[bytes] = None,
-                       sampled: bool = True) -> str:
+def create_traceparent(trace_id: bytes, span_id: Optional[bytes] = None, sampled: bool = True) -> str:
     """Create a W3C traceparent header value.
 
     Format: {version}-{trace_id}-{parent_id}-{flags}
@@ -44,7 +44,7 @@ def parse_traceparent(header: str) -> Optional[Dict[str, bytes]]:
     Returns dict with trace_id (16 bytes), span_id (8 bytes), sampled (bool)
     or None if invalid.
     """
-    parts = header.strip().split('-')
+    parts = header.strip().split("-")
     if len(parts) != 4:
         return None
 
@@ -58,17 +58,16 @@ def parse_traceparent(header: str) -> Optional[Dict[str, bytes]]:
             return None
 
         return {
-            'version': version,
-            'trace_id': trace_id,
-            'span_id': span_id,
-            'sampled': bool(flags & 0x01),
+            "version": version,
+            "trace_id": trace_id,
+            "span_id": span_id,
+            "sampled": bool(flags & 0x01),
         }
     except (ValueError, IndexError):
         return None
 
 
-def encode_tracestate_ahp(agent_id: bytes, sequence: int,
-                          chain_hash: bytes) -> str:
+def encode_tracestate_ahp(agent_id: bytes, sequence: int, chain_hash: bytes) -> str:
     """Encode AHP data for the tracestate header.
 
     Format: base64url(agent_id || sequence_uint64_be || chain_hash_16bytes)
@@ -79,8 +78,8 @@ def encode_tracestate_ahp(agent_id: bytes, sequence: int,
     # agent_id: 16 bytes
     # sequence: 8 bytes big-endian
     # chain_hash: first 16 bytes of the 32-byte hash
-    data = agent_id + struct.pack('>Q', sequence) + chain_hash[:16]
-    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+    data = agent_id + struct.pack(">Q", sequence) + chain_hash[:16]
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
 def decode_tracestate_ahp(encoded: str) -> Optional[Dict]:
@@ -91,20 +90,20 @@ def decode_tracestate_ahp(encoded: str) -> Optional[Dict]:
     """
     try:
         # Add padding back
-        padded = encoded + '=' * (4 - len(encoded) % 4) if len(encoded) % 4 else encoded
+        padded = encoded + "=" * (4 - len(encoded) % 4) if len(encoded) % 4 else encoded
         data = base64.urlsafe_b64decode(padded)
 
         if len(data) != 40:
             return None
 
         agent_id = data[:16]
-        sequence = struct.unpack('>Q', data[16:24])[0]
+        sequence = struct.unpack(">Q", data[16:24])[0]
         chain_hash = data[24:40]
 
         return {
-            'agent_id': agent_id,
-            'sequence': sequence,
-            'chain_hash': chain_hash,
+            "agent_id": agent_id,
+            "sequence": sequence,
+            "chain_hash": chain_hash,
         }
     except Exception:
         return None
@@ -120,15 +119,15 @@ def create_tracestate(ahp_value: str, existing: str = "") -> str:
 
     # Parse existing tracestate
     if existing:
-        for pair in existing.split(','):
+        for pair in existing.split(","):
             pair = pair.strip()
-            if pair and not pair.startswith('ahp='):
+            if pair and not pair.startswith("ahp="):
                 pairs.append(pair)
 
     # Add AHP entry at the beginning (most recently modified)
     pairs.insert(0, f"ahp={ahp_value}")
 
-    return ','.join(pairs)
+    return ",".join(pairs)
 
 
 def parse_tracestate_ahp(tracestate: str) -> Optional[Dict]:
@@ -136,26 +135,26 @@ def parse_tracestate_ahp(tracestate: str) -> Optional[Dict]:
 
     Returns decoded AHP data or None if not present.
     """
-    for pair in tracestate.split(','):
+    for pair in tracestate.split(","):
         pair = pair.strip()
-        if pair.startswith('ahp='):
+        if pair.startswith("ahp="):
             return decode_tracestate_ahp(pair[4:])
     return None
 
 
-def inject_headers(headers: Dict[str, str], trace_id: bytes,
-                   agent_id: bytes, sequence: int,
-                   chain_hash: bytes) -> Dict[str, str]:
+def inject_headers(
+    headers: Dict[str, str], trace_id: bytes, agent_id: bytes, sequence: int, chain_hash: bytes
+) -> Dict[str, str]:
     """Inject W3C Trace Context headers for outgoing requests.
 
     Adds/updates traceparent and tracestate headers.
     """
     span_id = generate_span_id()
-    headers['traceparent'] = create_traceparent(trace_id, span_id)
+    headers["traceparent"] = create_traceparent(trace_id, span_id)
 
     ahp_value = encode_tracestate_ahp(agent_id, sequence, chain_hash)
-    existing_tracestate = headers.get('tracestate', '')
-    headers['tracestate'] = create_tracestate(ahp_value, existing_tracestate)
+    existing_tracestate = headers.get("tracestate", "")
+    headers["tracestate"] = create_tracestate(ahp_value, existing_tracestate)
 
     return headers
 
@@ -166,7 +165,7 @@ def extract_context(headers: Dict[str, str]) -> Optional[Dict]:
     Returns dict with trace_id, span_id, sampled, and optionally
     ahp (agent_id, sequence, chain_hash) from tracestate.
     """
-    traceparent = headers.get('traceparent', '')
+    traceparent = headers.get("traceparent", "")
     if not traceparent:
         return None
 
@@ -177,10 +176,10 @@ def extract_context(headers: Dict[str, str]) -> Optional[Dict]:
     result = dict(parsed)
 
     # Try to extract AHP data from tracestate
-    tracestate = headers.get('tracestate', '')
+    tracestate = headers.get("tracestate", "")
     if tracestate:
         ahp_data = parse_tracestate_ahp(tracestate)
         if ahp_data:
-            result['ahp'] = ahp_data
+            result["ahp"] = ahp_data
 
     return result

@@ -4,12 +4,13 @@ Consolidates: PII filter setup, hash_payload logic, evidence store setup,
 boot payload construction, checkpoint payload construction (merkle root,
 signing), key genesis payload construction, and config resolution.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import platform
-from typing import Callable, Dict, List, Optional, Tuple, Any
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ahp.config import AHPConfig, WitnessConfig
 from ahp.core.evidence import EvidenceStore
@@ -21,16 +22,16 @@ from ahp.core.records import (
     Record,
 )
 from ahp.core.signing import (
+    HAS_CRYPTO,
     KeyPair,
+    compute_merkle_root,
     generate_keypair,
     sign,
-    compute_merkle_root,
-    HAS_CRYPTO,
 )
 from ahp.core.types import (
+    ZERO_HASH_32,
     ChainLevel,
     FsyncMode,
-    ZERO_HASH_32,
 )
 
 logger = logging.getLogger("ahp.recorder")
@@ -114,10 +115,7 @@ class RecorderBase:
         # ---- early crypto validation (level >= 2) --------------------------
         if self._level >= 2:
             if not HAS_CRYPTO:
-                raise RuntimeError(
-                    "Level 2+ requires 'cryptography' package. "
-                    "Install with: pip install ahp[signing]"
-                )
+                raise RuntimeError("Level 2+ requires 'cryptography' package. Install with: pip install ahp[signing]")
 
         # ---- evidence store ------------------------------------------------
         self._evidence_enabled = self._cfg.evidence_record
@@ -168,28 +166,20 @@ class RecorderBase:
     # PII filtering + hashing
     # ----------------------------------------------------------------
 
-    def _filter_and_hash(
-        self, payload: bytes, scope: str
-    ) -> Tuple[bytes, bytes, bool]:
+    def _filter_and_hash(self, payload: bytes, scope: str) -> Tuple[bytes, bytes, bool]:
         """Apply PII filters and compute hash.
 
         Returns (hash_16, filtered_payload, was_redacted).
         """
         return self._filters.hash_payload(payload, scope=scope)
 
-    def _filter_action_payloads(
-        self, parameters: bytes, result: bytes
-    ) -> Tuple[bytes, bytes, bytes, bytes, bool]:
+    def _filter_action_payloads(self, parameters: bytes, result: bytes) -> Tuple[bytes, bytes, bytes, bytes, bool]:
         """Filter both parameters and result.
 
         Returns (param_hash, result_hash, filtered_params, filtered_result, redacted).
         """
-        param_hash, filtered_params, param_redacted = self._filter_and_hash(
-            parameters, scope="parameters"
-        )
-        result_hash, filtered_result, result_redacted = self._filter_and_hash(
-            result, scope="results"
-        )
+        param_hash, filtered_params, param_redacted = self._filter_and_hash(parameters, scope="parameters")
+        result_hash, filtered_result, result_redacted = self._filter_and_hash(result, scope="results")
         redacted = param_redacted or result_redacted
         return param_hash, result_hash, filtered_params, filtered_result, redacted
 
@@ -197,9 +187,7 @@ class RecorderBase:
     # Evidence storage
     # ----------------------------------------------------------------
 
-    def _store_evidence(
-        self, filtered_params: bytes, filtered_result: bytes, param_hash: bytes
-    ) -> str:
+    def _store_evidence(self, filtered_params: bytes, filtered_result: bytes, param_hash: bytes) -> str:
         """Store evidence payloads if evidence is enabled.
 
         Returns the evidence URI or empty string.
@@ -255,9 +243,7 @@ class RecorderBase:
             supersedes_key_id=ZERO_HASH_32,
         )
 
-    def _build_checkpoint_payload(
-        self, record_count: int, gap_count: int, chain_hash: bytes
-    ) -> CheckpointPayload:
+    def _build_checkpoint_payload(self, record_count: int, gap_count: int, chain_hash: bytes) -> CheckpointPayload:
         """Construct a CheckpointPayload with merkle root and signature."""
         merkle_root = compute_merkle_root(self._record_hashes_since_checkpoint)
 
@@ -292,9 +278,7 @@ class RecorderBase:
         self._records_since_witness += 1
 
         if record._stored_bytes is not None:
-            self._record_hashes_since_checkpoint.append(
-                hashlib.sha256(record._stored_bytes).digest()
-            )
+            self._record_hashes_since_checkpoint.append(hashlib.sha256(record._stored_bytes).digest())
 
         # Fire callback hook
         if self._on_record_written is not None:
@@ -335,12 +319,8 @@ class RecorderBase:
     def _log_warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log a warning with structured context fields."""
         extra = {
-            "agent_id": getattr(self, "_chain", None)
-            and getattr(self._chain, "agent_id", b"").hex()
-            or "",
-            "session_id": getattr(self, "_chain", None)
-            and getattr(self._chain, "session_id", b"").hex()
-            or "",
+            "agent_id": getattr(self, "_chain", None) and getattr(self._chain, "agent_id", b"").hex() or "",
+            "session_id": getattr(self, "_chain", None) and getattr(self._chain, "session_id", b"").hex() or "",
             "record_count": self._records_since_checkpoint,
         }
         logger.warning(

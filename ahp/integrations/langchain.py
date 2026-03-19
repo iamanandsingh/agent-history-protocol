@@ -15,13 +15,15 @@ Usage:
     # ... run agent ...
     recorder.close()
 """
+
 from __future__ import annotations
 
 import json
 import time
-from typing import Any, Optional, Dict, List
-from ahp.core.types import ResultStatus, Protocol, ActionType
+from typing import Any, Dict, List, Optional
+
 from ahp.core.records import Authorization
+from ahp.core.types import ActionType, Protocol, ResultStatus
 
 try:
     from langchain_core.callbacks import BaseCallbackHandler as _LCBase
@@ -71,7 +73,7 @@ class AHPCallbackHandler(_LCBase):
         self._llm_prompts: Dict[str, str] = {}
 
         # Detect whether we have a full recorder or a raw ChainWriter
-        self._has_recorder = hasattr(recorder, 'record_action')
+        self._has_recorder = hasattr(recorder, "record_action")
 
     # ------------------------------------------------------------------
     # Tool callbacks
@@ -96,18 +98,14 @@ class AHPCallbackHandler(_LCBase):
         **kwargs: Any,
     ) -> None:
         """Called when a LangChain tool finishes successfully."""
-        key = run_id or 'unknown'
+        key = run_id or "unknown"
         start = self._tool_starts.pop(key, time.time())
-        input_str = self._tool_inputs.pop(key, '{}')
+        input_str = self._tool_inputs.pop(key, "{}")
         duration_ms = int((time.time() - start) * 1000)
 
-        tool_name = kwargs.get('name', 'unknown_tool')
-        params_bytes = input_str.encode('utf-8')
-        result_bytes = (
-            output.encode('utf-8')
-            if isinstance(output, str)
-            else str(output).encode('utf-8')
-        )
+        tool_name = kwargs.get("name", "unknown_tool")
+        params_bytes = input_str.encode("utf-8")
+        result_bytes = output.encode("utf-8") if isinstance(output, str) else str(output).encode("utf-8")
 
         if self._has_recorder:
             # Full pipeline: PII filtering, evidence, checkpointing, etc.
@@ -124,8 +122,11 @@ class AHPCallbackHandler(_LCBase):
         else:
             # Legacy: raw ChainWriter (no PII filtering/evidence)
             self._legacy_write_tool(
-                tool_name, params_bytes, result_bytes,
-                ResultStatus.SUCCESS, duration_ms,
+                tool_name,
+                params_bytes,
+                result_bytes,
+                ResultStatus.SUCCESS,
+                duration_ms,
             )
 
     def on_tool_error(
@@ -135,14 +136,14 @@ class AHPCallbackHandler(_LCBase):
         **kwargs: Any,
     ) -> None:
         """Called when a LangChain tool raises an error."""
-        key = run_id or 'unknown'
+        key = run_id or "unknown"
         start = self._tool_starts.pop(key, time.time())
-        input_str = self._tool_inputs.pop(key, '{}')
+        input_str = self._tool_inputs.pop(key, "{}")
         duration_ms = int((time.time() - start) * 1000)
 
-        tool_name = kwargs.get('name', 'unknown_tool')
-        params_bytes = input_str.encode('utf-8')
-        error_bytes = str(error).encode('utf-8')
+        tool_name = kwargs.get("name", "unknown_tool")
+        params_bytes = input_str.encode("utf-8")
+        error_bytes = str(error).encode("utf-8")
 
         if self._has_recorder:
             self._recorder.safe_record(
@@ -157,8 +158,11 @@ class AHPCallbackHandler(_LCBase):
             )
         else:
             self._legacy_write_tool(
-                tool_name, params_bytes, error_bytes,
-                ResultStatus.ERROR, duration_ms,
+                tool_name,
+                params_bytes,
+                error_bytes,
+                ResultStatus.ERROR,
+                duration_ms,
             )
 
     # ------------------------------------------------------------------
@@ -185,31 +189,31 @@ class AHPCallbackHandler(_LCBase):
         **kwargs: Any,
     ) -> None:
         """Called when an LLM call finishes."""
-        key = run_id or 'unknown'
+        key = run_id or "unknown"
         start = self._llm_starts.pop(key, time.time())
-        prompt_json = self._llm_prompts.pop(key, '[]')
+        prompt_json = self._llm_prompts.pop(key, "[]")
         duration_ms = int((time.time() - start) * 1000)
 
         response_text = str(response)
-        model_id = ''
+        model_id = ""
         input_tokens = 0
         output_tokens = 0
 
         # Extract model info and token counts from LangChain response
-        if hasattr(response, 'llm_output') and response.llm_output:
-            model_id = response.llm_output.get('model_name', '')
-            usage = response.llm_output.get('token_usage', {})
+        if hasattr(response, "llm_output") and response.llm_output:
+            model_id = response.llm_output.get("model_name", "")
+            usage = response.llm_output.get("token_usage", {})
             if isinstance(usage, dict):
-                input_tokens = usage.get('prompt_tokens', 0)
-                output_tokens = usage.get('completion_tokens', 0)
+                input_tokens = usage.get("prompt_tokens", 0)
+                output_tokens = usage.get("completion_tokens", 0)
 
-        prompt_bytes = prompt_json.encode('utf-8')
-        response_bytes = response_text.encode('utf-8')
+        prompt_bytes = prompt_json.encode("utf-8")
+        response_bytes = response_text.encode("utf-8")
 
         if self._has_recorder:
             # Full pipeline with PII filtering on prompts and responses
             self._recorder.safe_record(
-                tool_name=model_id or 'llm',
+                tool_name=model_id or "llm",
                 parameters=prompt_bytes,
                 result=response_bytes,
                 protocol=Protocol.HTTP,
@@ -223,8 +227,12 @@ class AHPCallbackHandler(_LCBase):
             )
         else:
             self._legacy_write_inference(
-                model_id, prompt_bytes, response_bytes,
-                duration_ms, input_tokens, output_tokens,
+                model_id,
+                prompt_bytes,
+                response_bytes,
+                duration_ms,
+                input_tokens,
+                output_tokens,
             )
 
     def on_llm_error(
@@ -234,17 +242,17 @@ class AHPCallbackHandler(_LCBase):
         **kwargs: Any,
     ) -> None:
         """Called when an LLM call raises an error."""
-        key = run_id or 'unknown'
+        key = run_id or "unknown"
         start = self._llm_starts.pop(key, time.time())
-        prompt_json = self._llm_prompts.pop(key, '[]')
+        prompt_json = self._llm_prompts.pop(key, "[]")
         duration_ms = int((time.time() - start) * 1000)
 
-        prompt_bytes = prompt_json.encode('utf-8')
-        error_bytes = str(error).encode('utf-8')
+        prompt_bytes = prompt_json.encode("utf-8")
+        error_bytes = str(error).encode("utf-8")
 
         if self._has_recorder:
             self._recorder.safe_record(
-                tool_name='llm',
+                tool_name="llm",
                 parameters=prompt_bytes,
                 result=error_bytes,
                 protocol=Protocol.HTTP,
@@ -255,7 +263,12 @@ class AHPCallbackHandler(_LCBase):
             )
         else:
             self._legacy_write_inference(
-                'llm', prompt_bytes, error_bytes, duration_ms, 0, 0,
+                "llm",
+                prompt_bytes,
+                error_bytes,
+                duration_ms,
+                0,
+                0,
             )
 
     # ------------------------------------------------------------------
@@ -286,44 +299,61 @@ class AHPCallbackHandler(_LCBase):
     # ------------------------------------------------------------------
 
     def _legacy_write_tool(
-        self, tool_name: str, params: bytes, result: bytes,
-        status: ResultStatus, duration_ms: int,
+        self,
+        tool_name: str,
+        params: bytes,
+        result: bytes,
+        status: ResultStatus,
+        duration_ms: int,
     ) -> None:
         """Write a tool action directly to ChainWriter (no PII filtering/evidence)."""
         import hashlib
-        from ahp.core.types import AuthorizationType
-        from ahp.core.records import ActionPayload, Authorization
 
-        self._recorder.write_record(ActionPayload(
-            tool_name=tool_name,
-            parameters_hash=hashlib.sha256(params).digest()[:16],
-            result_hash=hashlib.sha256(result).digest()[:16],
-            result_status=status,
-            response_time_ms=duration_ms,
-            protocol=Protocol.HTTP,
-            action_type=ActionType.TOOL_CALL,
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ), session_id=self._session_id)
+        from ahp.core.records import ActionPayload, Authorization
+        from ahp.core.types import AuthorizationType
+
+        self._recorder.write_record(
+            ActionPayload(
+                tool_name=tool_name,
+                parameters_hash=hashlib.sha256(params).digest()[:16],
+                result_hash=hashlib.sha256(result).digest()[:16],
+                result_status=status,
+                response_time_ms=duration_ms,
+                protocol=Protocol.HTTP,
+                action_type=ActionType.TOOL_CALL,
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            ),
+            session_id=self._session_id,
+        )
 
     def _legacy_write_inference(
-        self, model_id: str, params: bytes, result: bytes,
-        duration_ms: int, input_tokens: int, output_tokens: int,
+        self,
+        model_id: str,
+        params: bytes,
+        result: bytes,
+        duration_ms: int,
+        input_tokens: int,
+        output_tokens: int,
     ) -> None:
         """Write an inference action directly to ChainWriter (no PII filtering/evidence)."""
         import hashlib
-        from ahp.core.types import AuthorizationType
-        from ahp.core.records import ActionPayload, Authorization
 
-        self._recorder.write_record(ActionPayload(
-            tool_name=model_id or 'llm',
-            parameters_hash=hashlib.sha256(params).digest()[:16],
-            result_hash=hashlib.sha256(result).digest()[:16],
-            result_status=ResultStatus.SUCCESS,
-            response_time_ms=duration_ms,
-            protocol=Protocol.HTTP,
-            action_type=ActionType.INFERENCE,
-            model_id=model_id,
-            input_token_count=input_tokens,
-            output_token_count=output_tokens,
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ), session_id=self._session_id)
+        from ahp.core.records import ActionPayload, Authorization
+        from ahp.core.types import AuthorizationType
+
+        self._recorder.write_record(
+            ActionPayload(
+                tool_name=model_id or "llm",
+                parameters_hash=hashlib.sha256(params).digest()[:16],
+                result_hash=hashlib.sha256(result).digest()[:16],
+                result_status=ResultStatus.SUCCESS,
+                response_time_ms=duration_ms,
+                protocol=Protocol.HTTP,
+                action_type=ActionType.INFERENCE,
+                model_id=model_id,
+                input_token_count=input_tokens,
+                output_token_count=output_tokens,
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            ),
+            session_id=self._session_id,
+        )

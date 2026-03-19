@@ -5,18 +5,29 @@ Validates record fields before serialization to prevent:
 - Invalid enum values corrupting the chain
 - Malformed UUIDs or hashes
 """
+
 from __future__ import annotations
 
 from typing import List
 
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, AuthorizerType, AuthorizationDecision,
-    GapReason, ChainLevel,
-)
 from ahp.core.records import (
-    Record, ActionPayload, GapPayload, CheckpointPayload,
-    BootPayload, Authorization,
+    ActionPayload,
+    Authorization,
+    BootPayload,
+    CheckpointPayload,
+    GapPayload,
+    Record,
+)
+from ahp.core.types import (
+    ActionType,
+    AuthorizationDecision,
+    AuthorizationType,
+    AuthorizerType,
+    ChainLevel,
+    GapReason,
+    Protocol,
+    RecordType,
+    ResultStatus,
 )
 
 # Limits
@@ -29,6 +40,7 @@ MAX_RECORD_SIZE = 1048576  # 1MB canonical bytes
 
 class ValidationError(Exception):
     """Raised when a record fails validation."""
+
     pass
 
 
@@ -123,8 +135,10 @@ def _validate_authorization(auth: Authorization) -> List[str]:
         errors.append("AUTH_NONE must have 0 entries")
     if auth.type == AuthorizationType.AUTH_MULTI_PARTY and len(auth.entries) < 2:
         errors.append("AUTH_MULTI_PARTY must have >= 2 entries")
-    if auth.type in (AuthorizationType.AUTH_HUMAN, AuthorizationType.AUTH_AGENT,
-                     AuthorizationType.AUTH_POLICY) and len(auth.entries) != 1:
+    if (
+        auth.type in (AuthorizationType.AUTH_HUMAN, AuthorizationType.AUTH_AGENT, AuthorizationType.AUTH_POLICY)
+        and len(auth.entries) != 1
+    ):
         errors.append(f"{auth.type.name} must have exactly 1 entry, got {len(auth.entries)}")
 
     for i, entry in enumerate(auth.entries):
@@ -142,7 +156,7 @@ def _validate_authorization(auth: Authorization) -> List[str]:
             errors.append(f"auth entry {i}: invalid decision: {entry.decision}")
 
         if entry.authorizer_type == AuthorizerType.AUTHORIZER_AGENT:
-            if entry.authorizer_agent_id == b'\x00' * 16:
+            if entry.authorizer_agent_id == b"\x00" * 16:
                 errors.append(f"auth entry {i}: AUTHORIZER_AGENT must have authorizer_agent_id set")
 
     return errors
@@ -168,7 +182,7 @@ def _validate_boot(p: BootPayload) -> List[str]:
     if len(p.interceptors) > MAX_INTERCEPTORS:
         errors.append(f"Too many interceptors: {len(p.interceptors)}")
     if len(p.filter_config_hash) != 32:
-        errors.append(f"filter_config_hash must be 32 bytes")
+        errors.append("filter_config_hash must be 32 bytes")
     try:
         ChainLevel(p.chain_level)
     except ValueError:

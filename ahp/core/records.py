@@ -1,18 +1,30 @@
 """AHP record data model — all 7 record types + authorization."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
 from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, AuthorizerType, AuthorizationDecision,
-    GapReason, ChainLevel, FsyncMode, RecoveryMethod,
-    ZERO_HASH_32, ZERO_HASH_16, ZERO_UUID, SCHEMA_VERSION,
+    SCHEMA_VERSION,
+    ZERO_HASH_16,
+    ZERO_HASH_32,
+    ZERO_UUID,
+    ActionType,
+    AuthorizationDecision,
+    AuthorizationType,
+    AuthorizerType,
+    ChainLevel,
+    FsyncMode,
+    GapReason,
+    Protocol,
+    RecordType,
+    RecoveryMethod,
+    ResultStatus,
 )
 
-
 # --- Authorization ---
+
 
 @dataclass
 class AuthorizationEntry:
@@ -32,6 +44,7 @@ class Authorization:
 
 
 # --- Payloads ---
+
 
 @dataclass
 class ActionPayload:
@@ -67,7 +80,7 @@ class CheckpointPayload:
     gap_count: int = 0
     chain_hash: bytes = ZERO_HASH_32
     merkle_root: bytes = ZERO_HASH_32
-    signature: bytes = b'\x00' * 64
+    signature: bytes = b"\x00" * 64
     signing_key_id: bytes = ZERO_HASH_32
     evidence_available: int = 0
     evidence_exported: int = 0
@@ -118,7 +131,7 @@ class WitnessPayload:
     checkpoint_seq: int = 0
     checkpoint_hash: bytes = ZERO_HASH_32
     witness_timestamp: int = 0
-    receipt_signature: bytes = b'\x00' * 64
+    receipt_signature: bytes = b"\x00" * 64
     witness_public_key: bytes = ZERO_HASH_32
 
 

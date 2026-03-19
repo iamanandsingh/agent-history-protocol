@@ -6,24 +6,27 @@ matching the A2A protocol pattern:
 - Authorization delegation (agent can request auth from client)
 - AHP records every message as real A2A protocol calls
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
-import time
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Optional, Dict, Any, Callable, List
-from urllib.request import urlopen, Request
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Callable, Dict, Optional
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
-from ahp.core.types import (
-    ResultStatus, Protocol, ActionType, AuthorizationType,
-)
-from ahp.core.records import ActionPayload, Authorization
 from ahp.core.chain import ChainWriter
+from ahp.core.records import ActionPayload, Authorization
+from ahp.core.types import (
+    ActionType,
+    AuthorizationType,
+    Protocol,
+    ResultStatus,
+)
 from ahp.core.uuid7 import uuid7
-
 
 # A2A Task States (per A2A protocol spec)
 TASK_SUBMITTED = "SUBMITTED"
@@ -36,8 +39,7 @@ TASK_FAILED = "FAILED"
 class A2ATask:
     """Represents an A2A task with state tracking."""
 
-    def __init__(self, task_id: str, action: str, details: Dict[str, Any],
-                 requesting_agent_id: str):
+    def __init__(self, task_id: str, action: str, details: Dict[str, Any], requesting_agent_id: str):
         self.task_id = task_id
         self.action = action
         self.details = details
@@ -56,8 +58,7 @@ class A2AServer:
     authorization from the client (TASK_STATE_AUTH_REQUIRED).
     """
 
-    def __init__(self, agent_name: str, writer: ChainWriter, port: int = 8400,
-                 task_handler: Optional[Callable] = None):
+    def __init__(self, agent_name: str, writer: ChainWriter, port: int = 8400, task_handler: Optional[Callable] = None):
         self.agent_name = agent_name
         self.agent_id = writer.agent_id
         self.writer = writer
@@ -73,51 +74,65 @@ class A2AServer:
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
-                content_length = int(self.headers.get('Content-Length', 0))
+                content_length = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(content_length))
 
-                method = body.get('method', '')
-                params = body.get('params', {})
-                req_id = body.get('id', 1)
+                method = body.get("method", "")
+                params = body.get("params", {})
+                req_id = body.get("id", 1)
 
-                if method == 'tasks/send':
+                if method == "tasks/send":
                     result = agent._handle_task_send(params)
                     response = {"jsonrpc": "2.0", "id": req_id, "result": result}
-                elif method == 'tasks/get':
-                    task_id = params.get('id', '')
+                elif method == "tasks/get":
+                    task_id = params.get("id", "")
                     task = agent.tasks.get(task_id)
                     if task:
-                        response = {"jsonrpc": "2.0", "id": req_id, "result": {
-                            "id": task.task_id,
-                            "state": task.state,
-                            "result": task.result,
-                        }}
+                        response = {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "id": task.task_id,
+                                "state": task.state,
+                                "result": task.result,
+                            },
+                        }
                     else:
-                        response = {"jsonrpc": "2.0", "id": req_id,
-                                   "error": {"code": -32602, "message": "Task not found"}}
-                elif method == 'tasks/authorize':
+                        response = {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {"code": -32602, "message": "Task not found"},
+                        }
+                elif method == "tasks/authorize":
                     result = agent._handle_task_authorize(params)
                     response = {"jsonrpc": "2.0", "id": req_id, "result": result}
-                elif method == 'agent/identity':
-                    response = {"jsonrpc": "2.0", "id": req_id, "result": {
-                        "agent_id": agent.agent_id.hex(),
-                        "agent_name": agent.agent_name,
-                    }}
+                elif method == "agent/identity":
+                    response = {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "agent_id": agent.agent_id.hex(),
+                            "agent_name": agent.agent_name,
+                        },
+                    }
                 else:
-                    response = {"jsonrpc": "2.0", "id": req_id,
-                               "error": {"code": -32601, "message": f"Unknown method: {method}"}}
+                    response = {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {"code": -32601, "message": f"Unknown method: {method}"},
+                    }
 
                 resp_bytes = json.dumps(response).encode()
                 self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(resp_bytes)))
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp_bytes)))
                 self.end_headers()
                 self.wfile.write(resp_bytes)
 
             def log_message(self, format, *args):
                 pass
 
-        self.server = HTTPServer(('localhost', self.port), Handler)
+        self.server = HTTPServer(("localhost", self.port), Handler)
         self.port = self.server.server_address[1]  # actual port (handles port=0)
         self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._thread.start()
@@ -132,9 +147,9 @@ class A2AServer:
         task_id = uuid7().hex()[:16]
         task = A2ATask(
             task_id=task_id,
-            action=params.get('action', ''),
-            details=params.get('details', {}),
-            requesting_agent_id=params.get('agent_id', ''),
+            action=params.get("action", ""),
+            details=params.get("details", {}),
+            requesting_agent_id=params.get("agent_id", ""),
         )
         self.tasks[task_id] = task
 
@@ -145,7 +160,7 @@ class A2AServer:
         recv_action = ActionPayload(
             tool_name="a2a.tasks.receive",
             parameters_hash=hashlib.sha256(request_bytes).digest()[:16],
-            result_hash=hashlib.sha256(b'SUBMITTED').digest()[:16],
+            result_hash=hashlib.sha256(b"SUBMITTED").digest()[:16],
             result_status=ResultStatus.SUCCESS,
             response_time_ms=0,
             protocol=Protocol.A2A,
@@ -192,7 +207,7 @@ class A2AServer:
 
     def _handle_task_authorize(self, params: Dict) -> Dict:
         """Handle authorization provision for a task in AUTH_REQUIRED state."""
-        task_id = params.get('task_id', '')
+        task_id = params.get("task_id", "")
         task = self.tasks.get(task_id)
         if not task:
             return {"error": "Task not found"}
@@ -214,9 +229,13 @@ class A2AClient:
     Makes REAL JSON-RPC HTTP calls. AHP records every call as protocol=A2A.
     """
 
-    def __init__(self, agent_url: str, writer: ChainWriter,
-                 session_id: Optional[bytes] = None,
-                 parent_record_id: Optional[bytes] = None):
+    def __init__(
+        self,
+        agent_url: str,
+        writer: ChainWriter,
+        session_id: Optional[bytes] = None,
+        parent_record_id: Optional[bytes] = None,
+    ):
         self.agent_url = agent_url
         self.writer = writer
         self.session_id = session_id or uuid7()
@@ -226,8 +245,7 @@ class A2AClient:
     def set_parent(self, record_id: bytes) -> None:
         self.parent_record_id = record_id
 
-    def send_task(self, action: str, details: Dict,
-                  requesting_agent_id: str = "") -> Dict:
+    def send_task(self, action: str, details: Dict, requesting_agent_id: str = "") -> Dict:
         """Send a task to the remote agent via A2A protocol.
 
         Returns the task result including agent_id and sequence for cross-chain linking.
@@ -248,18 +266,14 @@ class A2AClient:
 
         # Make REAL HTTP call to A2A agent
         start = time.time()
-        response_bytes = b''
-        status_code = 200
+        response_bytes = b""
 
         try:
-            req = Request(self.agent_url, data=request_bytes,
-                         headers={"Content-Type": "application/json"})
+            req = Request(self.agent_url, data=request_bytes, headers={"Content-Type": "application/json"})
             with urlopen(req, timeout=15) as resp:
                 response_bytes = resp.read()
-                status_code = resp.status
         except (URLError, Exception):
             response_bytes = json.dumps({"error": "A2A request failed"}).encode()
-            status_code = 500
 
         duration_ms = int((time.time() - start) * 1000)
 
@@ -300,14 +314,17 @@ class A2AClient:
     def get_identity(self) -> Optional[Dict]:
         """Get remote agent's identity."""
         self._req_id += 1
-        body = json.dumps({
-            "jsonrpc": "2.0", "id": self._req_id,
-            "method": "agent/identity", "params": {},
-        }).encode()
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": self._req_id,
+                "method": "agent/identity",
+                "params": {},
+            }
+        ).encode()
 
         try:
-            req = Request(self.agent_url, data=body,
-                         headers={"Content-Type": "application/json"})
+            req = Request(self.agent_url, data=body, headers={"Content-Type": "application/json"})
             with urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read()).get("result")
         except Exception:

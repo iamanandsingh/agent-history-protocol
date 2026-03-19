@@ -2,10 +2,10 @@
 
 __version__ = "0.1.0a1"
 
-from ahp.recorder import AHPRecorder
 from ahp.async_recorder import AsyncAHPRecorder
 from ahp.config import AHPConfig, load_config
-from ahp.core.types import Protocol, ActionType, ResultStatus, AuthorizationType, RecordType
+from ahp.core.types import ActionType, AuthorizationType, Protocol, RecordType, ResultStatus
+from ahp.recorder import AHPRecorder
 
 __all__ = [
     "AHPRecorder",

@@ -9,6 +9,7 @@ Usage:
     record = await writer.write_record(payload)
     await writer.stop()
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,11 +21,11 @@ import zlib
 from pathlib import Path
 from typing import Optional, Union
 
-from ahp.core.types import RecordType, ZERO_HASH_32, SCHEMA_VERSION
-from ahp.core.records import Record, Payload, PAYLOAD_TYPE_MAP
 from ahp.core.canonical import canonical_bytes
+from ahp.core.chain import FILE_VERSION, MAGIC
+from ahp.core.records import PAYLOAD_TYPE_MAP, Payload, Record
+from ahp.core.types import SCHEMA_VERSION, ZERO_HASH_32, RecordType
 from ahp.core.uuid7 import uuid7
-from ahp.core.chain import MAGIC, FILE_VERSION
 
 
 class AsyncChainWriter:
@@ -35,8 +36,13 @@ class AsyncChainWriter:
     staging file → single writer architecture.
     """
 
-    def __init__(self, path: Union[str, Path], agent_id: Optional[bytes] = None,
-                 session_id: Optional[bytes] = None, max_queue: int = 10000):
+    def __init__(
+        self,
+        path: Union[str, Path],
+        agent_id: Optional[bytes] = None,
+        session_id: Optional[bytes] = None,
+        max_queue: int = 10000,
+    ):
         self.path = Path(path)
         self.agent_id = agent_id or uuid7()
         self.session_id = session_id or uuid7()
@@ -55,17 +61,18 @@ class AsyncChainWriter:
         # Acquire exclusive file lock (synchronous — done once at init)
         try:
             import fcntl
-            lock_path = str(self.path) + '.lock'
-            self._lock_file = open(lock_path, 'w')
+
+            lock_path = str(self.path) + ".lock"
+            self._lock_file = open(lock_path, "w")
             fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (ImportError, OSError):
             pass  # File locking not available on this platform
 
     def _write_header(self) -> None:
-        with open(self.path, 'wb') as f:
+        with open(self.path, "wb") as f:
             f.write(MAGIC)
-            f.write(struct.pack('<I', FILE_VERSION))
-            f.write(struct.pack('<Q', int(time.time() * 1000)))
+            f.write(struct.pack("<I", FILE_VERSION))
+            f.write(struct.pack("<Q", int(time.time() * 1000)))
         self._header_written = True
 
     async def start(self) -> None:
@@ -96,20 +103,21 @@ class AsyncChainWriter:
         if self._lock_file:
             try:
                 import fcntl
+
                 fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
             except (ImportError, OSError):
                 pass
             try:
-                lock_path = str(self.path) + '.lock'
+                lock_path = str(self.path) + ".lock"
                 self._lock_file.close()
                 os.unlink(lock_path)
             except OSError:
                 pass
             self._lock_file = None
 
-    async def write_record(self, payload: Payload,
-                           session_id: Optional[bytes] = None,
-                           timestamp_ms: Optional[int] = None) -> Record:
+    async def write_record(
+        self, payload: Payload, session_id: Optional[bytes] = None, timestamp_ms: Optional[int] = None
+    ) -> Record:
         """Queue a record for async writing. Returns the record immediately.
 
         The record is assigned sequence + prev_hash synchronously for
@@ -156,6 +164,7 @@ class AsyncChainWriter:
                 pending = self._queue.qsize() if self._queue else 0
                 if pending > 0:
                     import logging
+
                     logging.getLogger("ahp.async_chain").warning(
                         "Drain loop cancelled with %d pending records", pending
                     )
@@ -166,10 +175,10 @@ class AsyncChainWriter:
 
     def _write_to_file(self, stored: bytes) -> None:
         """Synchronous disk write — runs in a thread via asyncio.to_thread."""
-        with open(self.path, 'ab') as f:
+        with open(self.path, "ab") as f:
             length = len(stored)
-            length_bytes = struct.pack('<I', length)
-            crc = struct.pack('<I', zlib.crc32(length_bytes + stored) & 0xFFFFFFFF)
+            length_bytes = struct.pack("<I", length)
+            crc = struct.pack("<I", zlib.crc32(length_bytes + stored) & 0xFFFFFFFF)
             f.write(length_bytes + stored + crc)
 
     @property

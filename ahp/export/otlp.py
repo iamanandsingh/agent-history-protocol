@@ -5,12 +5,13 @@ Datadog, Grafana, Splunk, or any OTLP-compatible backend.
 
 Uses HTTP/JSON (not gRPC) for simplicity -- no protobuf dependency needed.
 """
+
 from __future__ import annotations
 
 import json
 from typing import List
-from urllib.request import urlopen, Request
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from ahp.core.chain import ChainReader
 from ahp.core.json_format import record_to_json
@@ -22,41 +23,43 @@ def map_record_to_otlp_log(record_json: dict) -> dict:
     OTLP LogRecord format:
     https://opentelemetry.io/docs/specs/otel/logs/data-model/
     """
-    body_value = json.dumps(record_json.get('payload', {}))
+    body_value = json.dumps(record_json.get("payload", {}))
     severity = "INFO"
 
-    if record_json['type'] == 'ACTION':
-        status = record_json.get('payload', {}).get('result_status', '')
-        if status in ('ERROR', 'FAILURE', 'TIMEOUT'):
+    if record_json["type"] == "ACTION":
+        status = record_json.get("payload", {}).get("result_status", "")
+        if status in ("ERROR", "FAILURE", "TIMEOUT"):
             severity = "ERROR"
-    elif record_json['type'] == 'GAP':
+    elif record_json["type"] == "GAP":
         severity = "WARN"
 
     severity_number = {"INFO": 9, "WARN": 13, "ERROR": 17}.get(severity, 9)
 
     attributes = [
-        {"key": "ahp.record.type", "value": {"stringValue": record_json['type']}},
-        {"key": "ahp.record.sequence", "value": {"intValue": str(record_json['sequence'])}},
-        {"key": "ahp.agent.id", "value": {"stringValue": record_json['agent_id']}},
-        {"key": "ahp.session.id", "value": {"stringValue": record_json['session_id']}},
-        {"key": "ahp.schema.version", "value": {"intValue": str(record_json['schema_version'])}},
+        {"key": "ahp.record.type", "value": {"stringValue": record_json["type"]}},
+        {"key": "ahp.record.sequence", "value": {"intValue": str(record_json["sequence"])}},
+        {"key": "ahp.agent.id", "value": {"stringValue": record_json["agent_id"]}},
+        {"key": "ahp.session.id", "value": {"stringValue": record_json["session_id"]}},
+        {"key": "ahp.schema.version", "value": {"intValue": str(record_json["schema_version"])}},
     ]
 
-    if record_json['type'] == 'ACTION':
-        p = record_json.get('payload', {})
-        attributes.extend([
-            {"key": "ahp.action.tool_name", "value": {"stringValue": p.get('tool_name', '')}},
-            {"key": "ahp.action.type", "value": {"stringValue": p.get('action_type', '')}},
-            {"key": "ahp.action.protocol", "value": {"stringValue": p.get('protocol', '')}},
-            {"key": "ahp.action.status", "value": {"stringValue": p.get('result_status', '')}},
-            {"key": "ahp.action.duration_ms", "value": {"intValue": str(p.get('response_time_ms', 0))}},
-            {"key": "ahp.auth.type", "value": {"stringValue": p.get('authorization', {}).get('type', '')}},
-        ])
-        if p.get('model_id'):
-            attributes.append({"key": "ahp.inference.model", "value": {"stringValue": p['model_id']}})
+    if record_json["type"] == "ACTION":
+        p = record_json.get("payload", {})
+        attributes.extend(
+            [
+                {"key": "ahp.action.tool_name", "value": {"stringValue": p.get("tool_name", "")}},
+                {"key": "ahp.action.type", "value": {"stringValue": p.get("action_type", "")}},
+                {"key": "ahp.action.protocol", "value": {"stringValue": p.get("protocol", "")}},
+                {"key": "ahp.action.status", "value": {"stringValue": p.get("result_status", "")}},
+                {"key": "ahp.action.duration_ms", "value": {"intValue": str(p.get("response_time_ms", 0))}},
+                {"key": "ahp.auth.type", "value": {"stringValue": p.get("authorization", {}).get("type", "")}},
+            ]
+        )
+        if p.get("model_id"):
+            attributes.append({"key": "ahp.inference.model", "value": {"stringValue": p["model_id"]}})
 
     return {
-        "timeUnixNano": str(record_json['timestamp_ms'] * 1_000_000),
+        "timeUnixNano": str(record_json["timestamp_ms"] * 1_000_000),
         "severityNumber": severity_number,
         "severityText": severity,
         "body": {"stringValue": body_value},
@@ -69,9 +72,9 @@ def map_record_to_otlp_log(record_json: dict) -> dict:
 class OTLPExporter:
     """Exports AHP records to an OTLP collector via HTTP/JSON."""
 
-    def __init__(self, endpoint: str = "http://localhost:4318/v1/logs",
-                 service_name: str = "ahp",
-                 batch_size: int = 100):
+    def __init__(
+        self, endpoint: str = "http://localhost:4318/v1/logs", service_name: str = "ahp", batch_size: int = 100
+    ):
         self.endpoint = endpoint
         self.service_name = service_name
         self.batch_size = batch_size
@@ -86,7 +89,7 @@ class OTLPExporter:
         all_bytes = reader.read_all()
 
         # Skip already exported
-        pending = all_bytes[self._exported_offset:]
+        pending = all_bytes[self._exported_offset :]
         if not pending:
             return {"exported": 0, "failed": 0, "total": len(all_bytes)}
 
@@ -95,7 +98,7 @@ class OTLPExporter:
 
         # Process in batches
         for i in range(0, len(pending), self.batch_size):
-            batch = pending[i:i + self.batch_size]
+            batch = pending[i : i + self.batch_size]
             log_records = []
 
             for stored in batch:
@@ -119,17 +122,21 @@ class OTLPExporter:
     def _send_batch(self, log_records: List[dict]) -> bool:
         """Send a batch of OTLP LogRecords to the collector."""
         payload = {
-            "resourceLogs": [{
-                "resource": {
-                    "attributes": [
-                        {"key": "service.name", "value": {"stringValue": self.service_name}},
-                    ]
-                },
-                "scopeLogs": [{
-                    "scope": {"name": "ahp", "version": "0.1.0"},
-                    "logRecords": log_records,
-                }]
-            }]
+            "resourceLogs": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {"key": "service.name", "value": {"stringValue": self.service_name}},
+                        ]
+                    },
+                    "scopeLogs": [
+                        {
+                            "scope": {"name": "ahp", "version": "0.1.0"},
+                            "logRecords": log_records,
+                        }
+                    ],
+                }
+            ]
         }
 
         try:
@@ -157,15 +164,19 @@ class OTLPExporter:
         Useful for testing and debugging the payload structure.
         """
         return {
-            "resourceLogs": [{
-                "resource": {
-                    "attributes": [
-                        {"key": "service.name", "value": {"stringValue": self.service_name}},
-                    ]
-                },
-                "scopeLogs": [{
-                    "scope": {"name": "ahp", "version": "0.1.0"},
-                    "logRecords": log_records,
-                }]
-            }]
+            "resourceLogs": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {"key": "service.name", "value": {"stringValue": self.service_name}},
+                        ]
+                    },
+                    "scopeLogs": [
+                        {
+                            "scope": {"name": "ahp", "version": "0.1.0"},
+                            "logRecords": log_records,
+                        }
+                    ],
+                }
+            ]
         }

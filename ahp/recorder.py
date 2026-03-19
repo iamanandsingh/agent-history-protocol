@@ -19,6 +19,7 @@ Usage:
         action_type=ActionType.TOOL_CALL,
     )
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,23 +34,23 @@ from ahp.config import AHPConfig, load_config
 from ahp.core.chain import ChainWriter
 from ahp.core.filters import Filter
 from ahp.core.records import (
-    Record,
     ActionPayload,
     Authorization,
+    Record,
     WitnessPayload,
 )
+from ahp.core.recovery import recover_chain
+from ahp.core.rotation import DEFAULT_MAX_SEGMENT_BYTES
 from ahp.core.signing import sign
 from ahp.core.types import (
-    ResultStatus,
-    Protocol,
+    ZERO_UUID,
     ActionType,
     AuthorizationType,
     GapReason,
-    ZERO_UUID,
+    Protocol,
+    ResultStatus,
 )
 from ahp.core.witness_client import send_checkpoint as _send_checkpoint
-from ahp.core.recovery import recover_chain
-from ahp.core.rotation import DEFAULT_MAX_SEGMENT_BYTES
 
 logger = logging.getLogger("ahp.recorder")
 
@@ -107,9 +108,7 @@ class AHPRecorder(RecorderBase):
 
         # ---- chain writer (with recovery + rotation) -----------------------
         if chain_path is None:
-            chain_path = str(
-                Path(tempfile.gettempdir()) / ("ahp_" + agent_name + ".ahp")
-            )
+            chain_path = str(Path(tempfile.gettempdir()) / ("ahp_" + agent_name + ".ahp"))
         self._chain_path = chain_path
 
         # Recovery: if chain file already exists, scan and truncate corrupt tail
@@ -125,9 +124,7 @@ class AHPRecorder(RecorderBase):
                         self._recovery_result.records_truncated,
                     )
             except Exception as exc:
-                self._log_warning(
-                    "Chain recovery failed for %s", chain_path, exc_info=True
-                )
+                self._log_warning("Chain recovery failed for %s", chain_path, exc_info=True)
                 self._fire_error_callback(exc, "chain_recovery")
 
         self._chain = ChainWriter(chain_path)
@@ -140,6 +137,7 @@ class AHPRecorder(RecorderBase):
             if evidence_path is None:
                 epath = str(Path(chain_path).parent / "evidence")
                 from ahp.core.evidence import EvidenceStore
+
                 self._evidence = EvidenceStore(epath)
 
         # ---- concurrency lock for counters -----------------------------------
@@ -205,12 +203,10 @@ class AHPRecorder(RecorderBase):
         Returns the :class:`Record` written to the chain.
         """
         # Phase 1: Outside lock — pure computation + idempotent I/O
-        param_hash, result_hash, filtered_params, filtered_result, redacted = (
-            self._filter_action_payloads(parameters, result)
+        param_hash, result_hash, filtered_params, filtered_result, redacted = self._filter_action_payloads(
+            parameters, result
         )
-        evidence_uri = self._store_evidence(
-            filtered_params, filtered_result, param_hash
-        )
+        evidence_uri = self._store_evidence(filtered_params, filtered_result, param_hash)
 
         # Phase 2: Inside lock — state mutations only
         with self._recorder_lock:
@@ -240,11 +236,7 @@ class AHPRecorder(RecorderBase):
             if self._records_since_checkpoint >= self._checkpoint_interval:
                 self.emit_checkpoint()
 
-            if (
-                self._level >= 3
-                and self._witness_endpoints
-                and self._records_since_witness >= self._witness_interval
-            ):
+            if self._level >= 3 and self._witness_endpoints and self._records_since_witness >= self._witness_interval:
                 self.send_witness_checkpoint()
 
             self._check_rotation()
@@ -330,9 +322,7 @@ class AHPRecorder(RecorderBase):
         sig_hex = ""
         key_id_hex = ""
         if self._level >= 2 and self._keypair is not None:
-            sig_hex = sign(
-                self._chain.prev_hash, self._keypair.private_key_bytes
-            ).hex()
+            sig_hex = sign(self._chain.prev_hash, self._keypair.private_key_bytes).hex()
             key_id_hex = self._keypair.key_id.hex()
 
         for endpoint in self._witness_endpoints:
@@ -352,18 +342,12 @@ class AHPRecorder(RecorderBase):
                         checkpoint_seq=sequence,
                         checkpoint_hash=self._chain.prev_hash,
                         witness_timestamp=receipt.get("timestamp_ms", timestamp_ms),
-                        receipt_signature=bytes.fromhex(
-                            receipt.get("signature", "00" * 64)
-                        ),
-                        witness_public_key=bytes.fromhex(
-                            receipt.get("public_key", "00" * 32)
-                        ),
+                        receipt_signature=bytes.fromhex(receipt.get("signature", "00" * 64)),
+                        witness_public_key=bytes.fromhex(receipt.get("public_key", "00" * 32)),
                     )
                     self._chain.write_record(witness_payload)
             except Exception as exc:
-                self._log_warning(
-                    "Witness checkpoint to %s failed", endpoint, exc_info=True
-                )
+                self._log_warning("Witness checkpoint to %s failed", endpoint, exc_info=True)
                 self._fire_error_callback(exc, "witness_checkpoint")
 
         self._reset_witness_counter()
@@ -499,7 +483,8 @@ class AHPRecorder(RecorderBase):
 
         logger.info(
             "Chain file %s reached %d bytes, rotating",
-            self._chain_path, chain_size,
+            self._chain_path,
+            chain_size,
         )
 
         prev_hash = self._chain._prev_hash
@@ -508,6 +493,7 @@ class AHPRecorder(RecorderBase):
         self._chain.close()
 
         import os as _os
+
         timestamp = int(time.time())
         segment_path = self._chain_path + f".{timestamp}.segment"
         try:

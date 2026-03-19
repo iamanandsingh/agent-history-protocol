@@ -11,16 +11,18 @@ Usage:
     patch_mcp_client(recorder)
     # Now any mcp.ClientSession.call_tool() is recorded automatically
 """
+
 from __future__ import annotations
 
 import json
 import time
-from typing import Optional, Any
+from typing import Any, Optional
 
-from ahp.core.types import Protocol, ActionType
+from ahp.core.types import ActionType, Protocol
 
 try:
     from mcp import ClientSession
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -48,13 +50,11 @@ def patch_mcp_client(recorder: Any) -> bool:
     async def _intercepted_call_tool(self: Any, name: str, arguments: Optional[dict] = None) -> Any:
         params_bytes = json.dumps(arguments or {}, sort_keys=True).encode()
         start = time.time()
-        error = None
         result = None
 
         try:
             result = await _original_call_tool(self, name, arguments)
         except Exception as e:
-            error = e
             duration_ms = int((time.time() - start) * 1000)
             _record_tool_call(name, params_bytes, str(e).encode(), duration_ms, False)
             raise
@@ -62,11 +62,11 @@ def patch_mcp_client(recorder: Any) -> bool:
         duration_ms = int((time.time() - start) * 1000)
 
         # Extract result content
-        result_bytes = b''
-        if result and hasattr(result, 'content'):
+        result_bytes = b""
+        if result and hasattr(result, "content"):
             content_parts = []
             for part in result.content:
-                if hasattr(part, 'text'):
+                if hasattr(part, "text"):
                     content_parts.append(part.text)
             result_bytes = json.dumps(content_parts).encode()
 
@@ -87,8 +87,7 @@ def unpatch_mcp_client() -> None:
         _recorder = None
 
 
-def _record_tool_call(name: str, params: bytes, result: bytes,
-                      duration_ms: int, success: bool) -> None:
+def _record_tool_call(name: str, params: bytes, result: bytes, duration_ms: int, success: bool) -> None:
     """Record a tool call in AHP (fail-open)."""
     if _recorder is None:
         return

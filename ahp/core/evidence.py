@@ -1,5 +1,7 @@
 """Evidence store — content-addressed payload storage (Section 6)."""
+
 from __future__ import annotations
+
 import hashlib
 import logging
 import os
@@ -119,8 +121,8 @@ class EvidenceStore:
     def count(self) -> dict:
         """Count evidence files by status (in-memory, no directory scan)."""
         return {
-            'available': self._file_count,
-            'missing': 0,  # would need chain scan to determine
+            "available": self._file_count,
+            "missing": 0,  # would need chain scan to determine
         }
 
     def cleanup(self) -> int:
@@ -160,7 +162,8 @@ class EvidenceStore:
                         removed += 1
                         logger.debug(
                             "Evidence cleanup: removed expired file %s (age=%.0fs)",
-                            filepath.name, now - stat.st_mtime,
+                            filepath.name,
+                            now - stat.st_mtime,
                         )
                     except OSError:
                         surviving.append((filepath, stat))
@@ -182,9 +185,10 @@ class EvidenceStore:
                     total_size -= stat.st_size
                     removed += 1
                     logger.debug(
-                        "Evidence cleanup: removed file %s to stay under size limit "
-                        "(removed %d bytes, total now %d)",
-                        filepath.name, stat.st_size, total_size,
+                        "Evidence cleanup: removed file %s to stay under size limit (removed %d bytes, total now %d)",
+                        filepath.name,
+                        stat.st_size,
+                        total_size,
                     )
                 except OSError:
                     continue

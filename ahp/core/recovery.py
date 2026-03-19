@@ -2,6 +2,7 @@
 
 Implements the recovery protocol from spec Section 3.6.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -9,10 +10,9 @@ import struct
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
+from ahp.core.chain import HEADER_SIZE, MAGIC, parse_envelope
 from ahp.core.types import ZERO_HASH_32
-from ahp.core.chain import MAGIC, HEADER_SIZE, parse_envelope
 from ahp.core.validation import MAX_RECORD_SIZE
 
 
@@ -34,8 +34,10 @@ def scan_chain(path: str) -> RecoveryResult:
     p = Path(path)
     if not p.exists():
         return RecoveryResult(
-            records_verified=0, records_truncated=0,
-            last_valid_seq=0, last_valid_offset=HEADER_SIZE,
+            records_verified=0,
+            records_truncated=0,
+            last_valid_seq=0,
+            last_valid_offset=HEADER_SIZE,
             last_prev_hash=ZERO_HASH_32,
         )
 
@@ -44,23 +46,25 @@ def scan_chain(path: str) -> RecoveryResult:
     last_valid_offset = HEADER_SIZE
     last_stored_bytes = None
 
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         header = f.read(HEADER_SIZE)
         if len(header) < HEADER_SIZE or header[:4] != MAGIC:
             return RecoveryResult(
-                records_verified=0, records_truncated=0,
-                last_valid_seq=0, last_valid_offset=0,
+                records_verified=0,
+                records_truncated=0,
+                last_valid_seq=0,
+                last_valid_offset=0,
                 last_prev_hash=ZERO_HASH_32,
             )
 
         while True:
-            record_start = f.tell()
+            f.tell()
 
             length_bytes = f.read(4)
             if len(length_bytes) < 4:
                 break
 
-            length = struct.unpack('<I', length_bytes)[0]
+            length = struct.unpack("<I", length_bytes)[0]
             # Check for unreasonable length (corrupt data)
             if length > MAX_RECORD_SIZE:
                 break  # Treat as corrupt
@@ -72,7 +76,7 @@ def scan_chain(path: str) -> RecoveryResult:
             if len(crc_bytes) < 4:
                 break
 
-            expected_crc = struct.unpack('<I', crc_bytes)[0]
+            expected_crc = struct.unpack("<I", crc_bytes)[0]
             actual_crc = zlib.crc32(length_bytes + stored) & 0xFFFFFFFF
             if actual_crc != expected_crc:
                 break  # Corrupt CRC
@@ -84,7 +88,7 @@ def scan_chain(path: str) -> RecoveryResult:
 
             try:
                 env = parse_envelope(stored)
-                last_valid_seq = env['sequence']
+                last_valid_seq = env["sequence"]
             except Exception:
                 pass
 
@@ -120,7 +124,7 @@ def scan_chain(path: str) -> RecoveryResult:
 
 def truncate_chain(path: str, valid_offset: int) -> None:
     """Truncate chain file to remove corrupt trailing data."""
-    with open(path, 'r+b') as f:
+    with open(path, "r+b") as f:
         f.truncate(valid_offset)
 
 
