@@ -29,6 +29,7 @@ except ImportError:
 WITNESS_ID = "ahp-reference-witness"
 RECEIPTS_FILE = "witness_receipts.json"
 MAX_REQUEST_SIZE = 1_048_576  # 1 MB
+MAX_RECEIPTS = 10_000  # rotate storage file after this many receipts
 _receipts_lock = threading.Lock()
 
 
@@ -54,6 +55,18 @@ def _save_receipts(data: Dict) -> None:
         except OSError:
             pass
         raise
+
+
+def _rotate_receipts_file() -> None:
+    """Rename the current receipts file to a timestamped archive and start fresh."""
+    if os.path.exists(RECEIPTS_FILE):
+        archive = RECEIPTS_FILE.replace(".json", f".{int(time.time() * 1000)}.json")
+        try:
+            os.replace(RECEIPTS_FILE, archive)
+            logger.info("Receipts file rotated to %s", archive)
+        except OSError as e:
+            logger.error("Failed to rotate receipts file: %s", e)
+            raise
 
 
 def _find_existing_receipt(data: Dict, agent_id: str, sequence) -> Optional[Dict]:
@@ -174,6 +187,11 @@ class WitnessHandler(BaseHTTPRequestHandler):
                     'sequence': sequence,
                     'timestamp_ms': body.get('timestamp_ms'),
                 }
+
+                # Rotate if at the size cap before appending
+                if len(data['receipts']) >= MAX_RECEIPTS:
+                    _rotate_receipts_file()
+                    data = {"receipts": []}
 
                 data['receipts'].append(receipt)
                 _save_receipts(data)

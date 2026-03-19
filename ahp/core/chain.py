@@ -14,7 +14,7 @@ import threading
 import time
 import zlib
 from pathlib import Path
-from typing import Optional, Union
+from typing import IO, Optional, Union
 
 from ahp.core.canonical import canonical_bytes
 from ahp.core.records import (
@@ -60,8 +60,8 @@ class ChainWriter:
         self._writes_since_fsync = 0
         self._lock = threading.Lock()
 
-        self._lock_file = None
-        self._data_file: Optional[object] = None  # must be set before _acquire_file_lock (for safe __del__)
+        self._lock_file: Optional[IO[str]] = None
+        self._data_file: Optional[IO[bytes]] = None  # must be set before _acquire_file_lock (for safe __del__)
         self._lock_path = str(self.path) + ".lock"
         self._acquire_file_lock()
 
@@ -82,7 +82,24 @@ class ChainWriter:
 
             fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except ImportError:
-            pass  # No fcntl (Windows) — skip locking
+            # fcntl not available (Windows) — fall back to msvcrt.locking()
+            try:
+                import msvcrt
+
+                # Write a byte so the file has content to lock, then seek back
+                self._lock_file.write("\x00")
+                self._lock_file.flush()
+                self._lock_file.seek(0)
+                msvcrt.locking(self._lock_file.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+            except ImportError:
+                pass  # Neither fcntl nor msvcrt — skip locking
+            except (IOError, OSError):
+                self._lock_file.close()
+                self._lock_file = None
+                raise RuntimeError(
+                    f"Chain file '{self.path}' is locked by another process. "
+                    f"Only one ChainWriter per chain file is allowed."
+                )
         except (IOError, OSError):
             self._lock_file.close()
             self._lock_file = None
@@ -107,7 +124,16 @@ class ChainWriter:
                 import fcntl
 
                 fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_UN)
-            except (ImportError, OSError):
+            except ImportError:
+                # Windows: release the msvcrt byte-range lock
+                try:
+                    import msvcrt
+
+                    self._lock_file.seek(0)
+                    msvcrt.locking(self._lock_file.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+                except (ImportError, OSError):
+                    pass
+            except OSError:
                 pass
             try:
                 self._lock_file.close()

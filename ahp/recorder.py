@@ -40,7 +40,7 @@ from ahp.core.records import (
     WitnessPayload,
 )
 from ahp.core.recovery import recover_chain
-from ahp.core.rotation import DEFAULT_MAX_SEGMENT_BYTES
+DEFAULT_MAX_SEGMENT_BYTES = 64 * 1024 * 1024  # 64MB — default chain segment size before rotation
 from ahp.core.signing import sign
 from ahp.core.types import (
     ZERO_UUID,
