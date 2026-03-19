@@ -51,7 +51,7 @@ jobs:
         run: ruff format --check ahp/
 
       - name: Mypy type check
-        run: mypy ahp/ --ignore-missing-imports
+        run: mypy ahp/ --ignore-missing-imports --python-version 3.9
 
   build:
     runs-on: ubuntu-latest
