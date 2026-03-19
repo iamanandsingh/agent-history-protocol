@@ -10,32 +10,7 @@ import * as crypto from "crypto";
 import { ZERO_HASH_32 } from "./types";
 import { parseEnvelope } from "./canonical";
 import { MAX_RECORD_SIZE } from "./validation";
-
-// Chain file constants (must match chain.ts)
-const MAGIC = Buffer.from("AHP\x00");
-const HEADER_SIZE = 16;
-
-// Pre-computed CRC32 lookup table (ISO 3309 / ITU-T V.42 polynomial)
-const CRC32_TABLE = new Uint32Array(256);
-for (let i = 0; i < 256; i++) {
-  let c = i;
-  for (let j = 0; j < 8; j++) {
-    if (c & 1) {
-      c = 0xedb88320 ^ (c >>> 1);
-    } else {
-      c = c >>> 1;
-    }
-  }
-  CRC32_TABLE[i] = c;
-}
-
-function crc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
+import { crc32, MAGIC, HEADER_SIZE } from "./chain";
 
 export interface RecoveryResult {
   recordsVerified: number;

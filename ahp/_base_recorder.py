@@ -11,7 +11,7 @@ import logging
 import platform
 from typing import Callable, Dict, List, Optional, Tuple, Any
 
-from ahp.config import AHPConfig, FilterConfig, WitnessConfig
+from ahp.config import AHPConfig, WitnessConfig
 from ahp.core.evidence import EvidenceStore
 from ahp.core.filters import Filter, FilterPipeline
 from ahp.core.records import (

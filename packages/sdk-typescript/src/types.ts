@@ -93,14 +93,14 @@ export enum RecoveryMethod {
 
 export const SCHEMA_VERSION = 1;
 
-/** 32 zero bytes — genesis prev_hash sentinel. Frozen to prevent mutation. */
-export const ZERO_HASH_32: Readonly<Uint8Array> = Object.freeze(new Uint8Array(32));
+/** 32 zero bytes — genesis prev_hash sentinel. */
+export const ZERO_HASH_32: Readonly<Uint8Array> = new Uint8Array(32);
 
-/** 16 zero bytes — default hash placeholder. Frozen to prevent mutation. */
-export const ZERO_HASH_16: Readonly<Uint8Array> = Object.freeze(new Uint8Array(16));
+/** 16 zero bytes — default hash placeholder. */
+export const ZERO_HASH_16: Readonly<Uint8Array> = new Uint8Array(16);
 
-/** 16 zero bytes — null UUID. Frozen to prevent mutation. */
-export const ZERO_UUID: Readonly<Uint8Array> = Object.freeze(new Uint8Array(16));
+/** 16 zero bytes — null UUID. */
+export const ZERO_UUID: Readonly<Uint8Array> = new Uint8Array(16);
 
 // --- Data model interfaces ---
 

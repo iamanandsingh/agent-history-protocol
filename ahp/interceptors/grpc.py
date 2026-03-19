@@ -12,7 +12,6 @@ Usage (when grpcio is available):
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from typing import Optional, Any, Callable
 

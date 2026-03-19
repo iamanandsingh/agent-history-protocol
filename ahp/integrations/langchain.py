@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Optional, Dict, List, Union
+from typing import Any, Optional, Dict, List
 from ahp.core.types import ResultStatus, Protocol, ActionType
 from ahp.core.records import Authorization
 

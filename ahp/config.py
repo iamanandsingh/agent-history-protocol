@@ -5,7 +5,6 @@ Implements Section 10 of the AHP specification.
 from __future__ import annotations
 
 import fnmatch
-import hashlib
 import json
 import logging
 import os

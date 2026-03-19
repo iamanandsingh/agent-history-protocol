@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import time
 import re
 from typing import Optional, Callable, Any, Dict, List, Tuple
 from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType

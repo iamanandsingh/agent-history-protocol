@@ -8,13 +8,10 @@ Implements the chain rotation strategy from spec Appendix C:
 """
 from __future__ import annotations
 
-import os
-import struct
-import time
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List
 
-from ahp.core.chain import ChainWriter, ChainReader, MAGIC, HEADER_SIZE
+from ahp.core.chain import ChainWriter, ChainReader
 
 
 DEFAULT_MAX_SEGMENT_BYTES = 64 * 1024 * 1024  # 64MB

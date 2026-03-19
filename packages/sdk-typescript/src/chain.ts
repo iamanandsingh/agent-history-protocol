@@ -8,7 +8,6 @@
 
 import * as fs from "fs";
 import * as crypto from "crypto";
-import * as zlib from "zlib";
 
 import {
   Record,
@@ -31,9 +30,9 @@ import { canonicalBytes, parseEnvelope } from "./canonical";
 import { uuid7 } from "./uuid7";
 
 // File format constants
-const MAGIC = Buffer.from("AHP\x00");
+export const MAGIC = Buffer.from("AHP\x00");
 const FILE_VERSION = 1;
-const HEADER_SIZE = 16; // 4 + 4 + 8
+export const HEADER_SIZE = 16; // 4 + 4 + 8
 
 // Pre-computed CRC32 lookup table (ISO 3309 / ITU-T V.42 polynomial)
 const CRC32_TABLE = new Uint32Array(256);
@@ -53,7 +52,7 @@ for (let i = 0; i < 256; i++) {
  * Compute CRC32 (same as Python zlib.crc32).
  * Node.js zlib does not directly expose crc32, so we use a manual table.
  */
-function crc32(data: Uint8Array): number {
+export function crc32(data: Uint8Array): number {
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < data.length; i++) {
     crc = CRC32_TABLE[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
@@ -67,15 +66,6 @@ function crc32(data: Uint8Array): number {
 function uint32LEBuffer(value: number): Buffer {
   const buf = Buffer.alloc(4);
   buf.writeUInt32LE(value, 0);
-  return buf;
-}
-
-/**
- * Write a uint64 little-endian to a Buffer.
- */
-function uint64LEBuffer(value: bigint): Buffer {
-  const buf = Buffer.alloc(8);
-  buf.writeBigUInt64LE(value, 0);
   return buf;
 }
 

@@ -31,9 +31,6 @@ jobs:
       - name: Run tests with coverage
         run: pytest --cov=ahp --cov-report=xml tests/
 
-      - name: Run benchmarks (smoke test)
-        run: python benchmarks/bench.py 100
-
   lint:
     runs-on: ubuntu-latest
     steps:

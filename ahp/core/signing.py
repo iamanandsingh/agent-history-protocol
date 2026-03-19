@@ -1,7 +1,6 @@
 """Ed25519 signing — Section 7 of the AHP specification."""
 from __future__ import annotations
 import hashlib
-import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 

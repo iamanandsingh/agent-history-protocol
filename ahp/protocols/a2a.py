@@ -21,9 +21,9 @@ from ahp.core.types import (
     ResultStatus, Protocol, ActionType, AuthorizationType,
     AuthorizerType, AuthorizationDecision,
 )
-from ahp.core.records import ActionPayload, Authorization, AuthorizationEntry
+from ahp.core.records import ActionPayload, Authorization
 from ahp.core.chain import ChainWriter
-from ahp.core.uuid7 import uuid7, uuid7_to_str
+from ahp.core.uuid7 import uuid7
 
 
 # A2A Task States (per A2A protocol spec)

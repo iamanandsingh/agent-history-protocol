@@ -26,11 +26,11 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, List, Optional
 
 from ahp._base_recorder import RecorderBase
 from ahp.config import AHPConfig, load_config
-from ahp.core.chain import ChainWriter, ChainReader
+from ahp.core.chain import ChainWriter
 from ahp.core.filters import Filter
 from ahp.core.records import (
     Record,
@@ -38,7 +38,7 @@ from ahp.core.records import (
     Authorization,
     WitnessPayload,
 )
-from ahp.core.signing import KeyPair, sign
+from ahp.core.signing import sign
 from ahp.core.types import (
     RecordType,
     ResultStatus,
@@ -51,7 +51,7 @@ from ahp.core.types import (
 )
 from ahp.core.witness_client import send_checkpoint as _send_checkpoint
 from ahp.core.recovery import recover_chain
-from ahp.core.rotation import ChainRotator, DEFAULT_MAX_SEGMENT_BYTES
+from ahp.core.rotation import DEFAULT_MAX_SEGMENT_BYTES
 
 logger = logging.getLogger("ahp.recorder")
 

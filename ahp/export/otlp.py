@@ -8,15 +8,12 @@ Uses HTTP/JSON (not gRPC) for simplicity -- no protobuf dependency needed.
 from __future__ import annotations
 
 import json
-import time
 from typing import Optional, List, Dict, Any
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
-from ahp.core.chain import ChainReader, parse_envelope
+from ahp.core.chain import ChainReader
 from ahp.core.json_format import record_to_json
-from ahp.core.types import RecordType
-from ahp.core.uuid7 import uuid7_to_str
 
 
 def map_record_to_otlp_log(record_json: dict) -> dict:

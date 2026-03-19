@@ -35,8 +35,6 @@ Thumbs.db
 # Node.js
 node_modules/
 package-lock.json
-test_openclaw/node_modules/
-test_openclaw/package-lock.json
 test_openclaw/*.jsonl
 test_openclaw/evidence/
 
