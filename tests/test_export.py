@@ -295,5 +295,74 @@ class TestOTLPBatchFormat(unittest.TestCase):
                 self.assertIn(field, lr, f"Missing field: {field}")
 
 
+class TestOTLPRealSend(unittest.TestCase):
+    """Test OTLP export sending to a real HTTP endpoint."""
+
+    def test_send_to_mock_collector(self):
+        """Start a mock OTLP collector, send records, verify they arrive."""
+        import json
+        import threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        from ahp.core.chain import ChainWriter
+        from ahp.core.records import ActionPayload, BootPayload, Authorization
+        from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
+        from ahp.export.otlp import OTLPExporter
+
+        received = []
+
+        class OTLPHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = json.loads(self.rfile.read(content_length))
+                received.append(body)
+                self.send_response(200)
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+            def log_message(self, *a):
+                pass
+
+        server = HTTPServer(('localhost', 0), OTLPHandler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            tmpdir = tempfile.mkdtemp()
+            chain_path = os.path.join(tmpdir, "otlp_test.ahp")
+            writer = ChainWriter(chain_path)
+            writer.write_record(BootPayload(agent_name="otlp-test"))
+            writer.write_record(ActionPayload(
+                tool_name="test_tool",
+                result_status=ResultStatus.SUCCESS,
+                protocol=Protocol.MCP,
+                action_type=ActionType.TOOL_CALL,
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            ))
+            writer.close()
+
+            exporter = OTLPExporter(
+                endpoint=f"http://localhost:{port}/v1/logs",
+                service_name="ahp-test",
+            )
+            result = exporter.export_chain(chain_path)
+
+            self.assertGreater(result['exported'], 0)
+            self.assertEqual(result['failed'], 0)
+            self.assertGreater(len(received), 0)
+
+            payload = received[0]
+            self.assertIn('resourceLogs', payload)
+            resource_logs = payload['resourceLogs']
+            self.assertGreater(len(resource_logs), 0)
+            scope_logs = resource_logs[0]['scopeLogs']
+            self.assertGreater(len(scope_logs), 0)
+            log_records = scope_logs[0]['logRecords']
+            self.assertGreater(len(log_records), 0)
+
+        finally:
+            server.shutdown()
+
+
 if __name__ == '__main__':
     unittest.main()
