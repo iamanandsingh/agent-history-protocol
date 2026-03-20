@@ -251,7 +251,7 @@ export interface ParsedEnvelope {
  * Parse the common envelope from canonical bytes.
  */
 export function parseEnvelope(storedBytes: Uint8Array): ParsedEnvelope {
-  if (storedBytes.length < 104) {
+  if (storedBytes.length < 108) {
     throw new Error("Record too short for envelope");
   }
 

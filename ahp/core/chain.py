@@ -394,7 +394,7 @@ def parse_envelope(stored_bytes: bytes) -> dict:
     Returns dict with: record_id, agent_id, session_id, timestamp_ms,
     sequence, prev_hash, schema_version, record_type, payload_bytes.
     """
-    if len(stored_bytes) < 104:  # minimum envelope size
+    if len(stored_bytes) < 108:  # minimum envelope (104) + payload discriminator (4)
         raise ValueError("Record too short for envelope")
 
     offset = 0

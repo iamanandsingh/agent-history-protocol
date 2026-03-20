@@ -137,7 +137,9 @@ def _verify_client_signature(body: dict) -> bool:
 
         signature = bytes.fromhex(signature_hex)
         public_key = bytes.fromhex(public_key_hex)
-        verify_signature(sign_data, signature, public_key)
+        if not verify_signature(sign_data, signature, public_key):
+            logger.warning("Signature verification returned False")
+            return False
         return True
     except Exception as e:
         logger.warning("Signature verification failed: %s", e)
@@ -149,7 +151,7 @@ class WitnessHandler(BaseHTTPRequestHandler):
         if self.path == "/ahp/v1/checkpoints":
             # Check request size limit
             content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > MAX_REQUEST_SIZE:
+            if content_length < 0 or content_length > MAX_REQUEST_SIZE:
                 self.send_error(413, "Request body too large")
                 return
 

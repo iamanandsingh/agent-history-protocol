@@ -15,7 +15,7 @@ import { crc32, MAGIC, HEADER_SIZE } from "./chain";
 export interface RecoveryResult {
   recordsVerified: number;
   recordsTruncated: number;
-  lastValidSeq: number;
+  lastValidSeq: bigint;
   lastValidOffset: number; // file offset after last valid record
   lastPrevHash: Uint8Array; // prev_hash for next record to continue chain
 }
@@ -31,7 +31,7 @@ export function scanChain(chainPath: string): RecoveryResult {
     return {
       recordsVerified: 0,
       recordsTruncated: 0,
-      lastValidSeq: 0,
+      lastValidSeq: 0n,
       lastValidOffset: HEADER_SIZE,
       lastPrevHash: new Uint8Array(ZERO_HASH_32),
     };
@@ -39,7 +39,7 @@ export function scanChain(chainPath: string): RecoveryResult {
 
   const fd = fs.openSync(chainPath, "r");
   let recordsVerified = 0;
-  let lastValidSeq = 0;
+  let lastValidSeq = 0n;
   let lastValidOffset = HEADER_SIZE;
   let lastStoredBytes: Buffer | null = null;
 
@@ -53,7 +53,7 @@ export function scanChain(chainPath: string): RecoveryResult {
       return {
         recordsVerified: 0,
         recordsTruncated: 0,
-        lastValidSeq: 0,
+        lastValidSeq: 0n,
         lastValidOffset: 0,
         lastPrevHash: new Uint8Array(ZERO_HASH_32),
       };
@@ -90,7 +90,7 @@ export function scanChain(chainPath: string): RecoveryResult {
 
       try {
         const env = parseEnvelope(new Uint8Array(stored));
-        lastValidSeq = Number(env.sequence);
+        lastValidSeq = env.sequence;
       } catch {
         // ignore parse errors — CRC was valid
       }

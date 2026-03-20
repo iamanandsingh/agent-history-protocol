@@ -70,6 +70,7 @@ def get_identity(endpoint: str) -> Optional[Dict]:
         req = Request(url)
         with urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
-    except (URLError, OSError) as e:
+    except (URLError, OSError, json.JSONDecodeError) as e:
         logger.warning("Witness identity request failed: %s", e)
+        return None
         return None

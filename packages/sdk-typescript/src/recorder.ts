@@ -531,12 +531,12 @@ export class AHPRecorder {
     const recoveryRecord = this._chain.writeRecovery(
       BigInt(recoveryResult.recordsVerified),
       BigInt(recoveryResult.recordsTruncated),
-      BigInt(recoveryResult.lastValidSeq)
+      recoveryResult.lastValidSeq
     );
     this._trackRecord(recoveryRecord);
 
     if (recoveryResult.recordsTruncated > 0) {
-      const firstLost = BigInt(recoveryResult.lastValidSeq + 1);
+      const firstLost = recoveryResult.lastValidSeq + 1n;
       const lastLost =
         firstLost + BigInt(recoveryResult.recordsTruncated) - 1n;
       const gapRecord = this._chain.writeGap(

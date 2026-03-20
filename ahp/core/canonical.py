@@ -176,5 +176,7 @@ def _bool(value: bool) -> bytes:
 def _append_string(buf: bytearray, s: str) -> None:
     """UTF-8 bytes with uint32 length prefix."""
     encoded = s.encode("utf-8")
+    if len(encoded) > 0xFFFFFFFF:
+        raise ValueError(f"String too long for uint32 length prefix: {len(encoded)} bytes")
     buf += _uint32(len(encoded))
     buf += encoded

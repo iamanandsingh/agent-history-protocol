@@ -30,20 +30,20 @@ def export_jsonl(chain_path: Union[str, Path], output_path: Union[str, Path], la
 
 def export_csv(chain_path: Union[str, Path], output_path: Union[str, Path]) -> int:
     """Export chain to CSV file. Returns number of records exported."""
+    import csv
+
     from ahp.core.json_format import format_action_summary
 
     reader = ChainReader(chain_path)
     all_bytes = reader.read_all()
 
+    fieldnames = ["sequence", "timestamp_ms", "type", "tool_name", "result_status", "response_time_ms", "authorization"]
     count = 0
-    with open(output_path, "w") as f:
-        f.write("sequence,timestamp_ms,type,tool_name,result_status,response_time_ms,authorization\n")
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
         for stored in all_bytes:
-            s = format_action_summary(stored)
-            f.write(
-                f"{s['sequence']},{s['timestamp_ms']},{s['type']},{s['tool_name']},"
-                f"{s['result_status']},{s['response_time_ms']},{s['authorization']}\n"
-            )
+            writer.writerow(format_action_summary(stored))
             count += 1
 
     return count
