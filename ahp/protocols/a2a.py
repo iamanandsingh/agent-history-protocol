@@ -148,6 +148,9 @@ class A2AServer:
     def stop(self) -> None:
         if self.server:
             self.server.shutdown()
+            self.server.server_close()
+            if self._thread:
+                self._thread.join(timeout=2)
 
     def _handle_task_send(self, params: Dict) -> Dict:
         """Handle incoming task — the core A2A task processing."""

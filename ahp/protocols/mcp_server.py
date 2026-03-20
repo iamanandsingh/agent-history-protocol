@@ -98,3 +98,6 @@ class MCPToolServer:
     def stop(self) -> None:
         if self.server:
             self.server.shutdown()
+            self.server.server_close()
+            if self._thread:
+                self._thread.join(timeout=2)
