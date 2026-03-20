@@ -40,7 +40,6 @@ from ahp.core.records import (
     WitnessPayload,
 )
 from ahp.core.recovery import recover_chain
-DEFAULT_MAX_SEGMENT_BYTES = 64 * 1024 * 1024  # 64MB — default chain segment size before rotation
 from ahp.core.signing import sign
 from ahp.core.types import (
     ZERO_UUID,
@@ -53,6 +52,8 @@ from ahp.core.types import (
 from ahp.core.witness_client import send_checkpoint as _send_checkpoint
 
 logger = logging.getLogger("ahp.recorder")
+
+DEFAULT_MAX_SEGMENT_BYTES = 64 * 1024 * 1024  # 64MB
 
 
 class AHPRecorder(RecorderBase):

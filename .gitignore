@@ -51,3 +51,6 @@ ahp-key.priv
 # Environment
 .env
 .env.local
+
+# Claude Code
+.claude/
