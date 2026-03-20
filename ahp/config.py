@@ -136,7 +136,7 @@ def _find_config(explicit_path: Optional[str] = None) -> Optional[str]:
 
 def _load_from_yaml(path: str, agent_name: str) -> AHPConfig:
     """Load config from YAML file."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
     config = _parse_raw_config(raw, agent_name)
@@ -146,7 +146,7 @@ def _load_from_yaml(path: str, agent_name: str) -> AHPConfig:
 
 def _load_from_json(path: str, agent_name: str) -> AHPConfig:
     """Load config from JSON file."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = json.load(f)
 
     config = _parse_raw_config(raw, agent_name)

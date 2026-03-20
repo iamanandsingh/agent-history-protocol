@@ -113,12 +113,15 @@ export class ChainWriter {
 
   private _writeHeader(): void {
     const fd = fs.openSync(this.path, "w");
-    const header = Buffer.alloc(HEADER_SIZE);
-    MAGIC.copy(header, 0);
-    header.writeUInt32LE(FILE_VERSION, 4);
-    header.writeBigUInt64LE(BigInt(Date.now()), 8);
-    fs.writeSync(fd, header);
-    fs.closeSync(fd);
+    try {
+      const header = Buffer.alloc(HEADER_SIZE);
+      MAGIC.copy(header, 0);
+      header.writeUInt32LE(FILE_VERSION, 4);
+      header.writeBigUInt64LE(BigInt(Date.now()), 8);
+      fs.writeSync(fd, header);
+    } finally {
+      fs.closeSync(fd);
+    }
   }
 
   /**
