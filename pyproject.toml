@@ -82,5 +82,9 @@ exclude = ["_pytest"]
 module = ["_pytest", "_pytest.*"]
 follow_imports = "skip"
 
+[[tool.mypy.overrides]]
+module = ["requests", "requests.*", "httpx", "httpx.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
