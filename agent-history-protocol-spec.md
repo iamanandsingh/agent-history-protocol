@@ -21,7 +21,15 @@ AHP is transport-agnostic and framework-agnostic. It defines what records look l
 - Optional authorization tracking for human-in-the-loop and multi-agent approval workflows
 - Cross-SDK interoperability via deterministic canonical serialization
 
-### 1.2 Scope
+### 1.2 Architecture Overview
+
+The following diagram shows how AHP components fit together at runtime. Interceptors capture agent actions across protocols, PII filters redact sensitive data, and the AHPRecorder writes to a hash chain and optional evidence store. Signing, witness attestation, and export are downstream consumers of the chain.
+
+<p align="center">
+  <img src="docs/images/01-architecture.svg" alt="AHP Architecture — Agent → Interceptors → PII Filters → AHPRecorder → Hash Chain + Evidence Store → Signing / Witness / Export" width="800"/>
+</p>
+
+### 1.3 Scope
 
 This specification defines the protocol. SDK architecture, interceptor patterns, crash recovery, CLI commands, OTLP export mapping, and framework integrations are defined in the separate SDK Implementation Guide.
 
@@ -71,6 +79,12 @@ All record types share a common envelope. This enables hash chain verification w
 | `type` | enum | ACTION(1), GAP(2), CHECKPOINT(3), BOOT(4), RECOVERY(5), KEY(6), WITNESS(7). Value 0 is UNSPECIFIED and MUST NOT appear in valid records |
 | `payload` | oneof | Type-specific payload (see Sections 3.2–3.8) |
 
+The following diagram shows all seven record types and how they relate to the common envelope, supported protocols, and result statuses.
+
+<p align="center">
+  <img src="docs/images/03-record-types.svg" alt="Seven AHP record types: ACTION, GAP, CHECKPOINT, BOOT, RECOVERY, KEY, WITNESS with common envelope and supported protocols" width="800"/>
+</p>
+
 **Enum convention:** All enums in this specification reserve value 0 as UNSPECIFIED. This prevents Protobuf's default zero-value from being silently interpreted as a valid state. A record with any enum field set to 0 (UNSPECIFIED) is malformed and MUST be rejected by verifiers.
 
 **Enum naming:** Throughout this specification, enum values are referred to by their short names (e.g., MCP, HTTP, INFERENCE). In the Protobuf schema (Appendix A), these values use prefixed names following Protobuf conventions (e.g., PROTOCOL_MCP, ACTION_INFERENCE). In JSON serialization (Appendix H), the short prose names are used (e.g., `"MCP"`, `"INFERENCE"`). Implementations MUST support mapping between all three representations.
@@ -100,6 +114,10 @@ One agent action. The core record type.
 **Inference semantics:** When `action_type = INFERENCE`, the record captures an LLM reasoning step. `parameters_hash` covers the prompt sent to the LLM. `result_hash` covers the full response including reasoning/thinking tokens. Tool calls resulting from the inference MUST set `parent_action_id` to the INFERENCE record's `record_id`. Sequential INFERENCE records in the same session SHOULD set `parent_action_id` to the most recent prior INFERENCE record (conversational continuity).
 
 `parent_action_id` means "the action that most directly caused this action to happen."
+
+<p align="center">
+  <img src="docs/images/06-causal-links.svg" alt="Causal links — parent_action_id forms a tree from INFERENCE to TOOL_CALL records showing how each action traces back to the reasoning step that triggered it" width="800"/>
+</p>
 
 **Streaming responses:** For streaming LLM responses, the INFERENCE ActionRecord MUST be emitted after the complete response has been received. `result_hash` covers the fully assembled response, not individual stream chunks.
 
@@ -210,6 +228,10 @@ External attestation stored in the chain.
 ### 3.9 Authorization Model
 
 Authorization records who approved (or rejected) an agent action before it was executed. This is distinct from causation (`parent_action_id`), which records what triggered an action. Causation answers "what decided to do this?" — authorization answers "who allowed it?"
+
+<p align="center">
+  <img src="docs/images/05-authorization.svg" alt="Authorization model — five auth types (NONE, HUMAN, AGENT, POLICY, MULTI_PARTY) and cross-chain verification between authorizer and executor chains" width="800"/>
+</p>
 
 #### 3.9.1 Authorization Object
 
@@ -346,6 +368,10 @@ Records exceeding these limits MAY be rejected by verifiers and witnesses. SDKs 
 ## 4. Canonical Serialization
 
 Hash chain integrity requires that any conformant implementation produces identical bytes for the same logical record. This section defines the canonical byte representation used for hashing.
+
+<p align="center">
+  <img src="docs/images/09-canonical-serialization.svg" alt="Canonical serialization byte layout — fixed envelope (record_id, agent_id, session_id, timestamp, sequence, prev_hash, schema_version, type) followed by variable payload fields in ascending tag order, with encoding rules for each data type" width="800"/>
+</p>
 
 ### 4.1 Rules
 
@@ -543,6 +569,12 @@ Record_N.prev_hash = SHA-256(stored_bytes(Record_{N-1}))
 
 Where `stored_bytes` is the record's on-disk representation, which equals its canonical serialization (Section 4.2).
 
+The following diagram visualizes how records chain together via SHA-256 hashes, how tampering is detected, and how GapRecords document lost records.
+
+<p align="center">
+  <img src="docs/images/02-hash-chain.svg" alt="Hash chain visualization — BOOT, INFERENCE, TOOL_CALL, CHECKPOINT records linked by SHA-256 prev_hash, with tamper detection and gap handling" width="800"/>
+</p>
+
 ### 5.4 Verification Algorithm
 
 ```
@@ -579,6 +611,10 @@ function verify_chain(records):
 ### 6.1 Content-Addressed Linking
 
 The chain stores hashes. The evidence store stores content. They are linked by hash.
+
+<p align="center">
+  <img src="docs/images/07-evidence-model.svg" alt="Evidence model — compact hash chain on the left linked by evidence_hash to the rich evidence store on the right, showing content-addressed separation of concerns" width="800"/>
+</p>
 
 ```
 Chain:     ActionRecord { parameters_hash: 0xa1b2c3d4... }
@@ -654,6 +690,10 @@ After step 3, the old key is retired. Both checkpoints create a signed handoff t
 ### 8.1 Checkpoint API
 
 Witnesses are independent services that receive chain state and issue signed receipts.
+
+<p align="center">
+  <img src="docs/images/08-witness-protocol.svg" alt="Witness protocol sequence — Agent sends WitnessRequest with chain_hash and agent signature, Witness verifies and signs, returns WitnessResponse with witness signature and timestamp, Agent stores WITNESS record in chain" width="800"/>
+</p>
 
 **POST /ahp/v1/checkpoints**
 
@@ -848,6 +888,12 @@ If configuration is hot-reloaded, the SDK MUST emit a new BootRecord with the up
 ---
 
 ## 11. Conformance Levels
+
+Each level builds on the previous, adding stronger trust guarantees. Start at Level 1 and add signing and witnesses as compliance needs grow.
+
+<p align="center">
+  <img src="docs/images/04-conformance-levels.svg" alt="Three nested conformance levels — Level 1 (Hash Chain), Level 2 (Signed), Level 3 (Witnessed)" width="800"/>
+</p>
 
 ### 11.0 Level 0: Development Mode (Non-Conformant)
 

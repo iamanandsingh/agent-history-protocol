@@ -2,6 +2,10 @@
 
 The Agent History Protocol (AHP) is an open standard for tamper-evident recording of AI agent actions. Every tool call, inference, and delegation is written to a hash-chained log that anyone can verify — a flight recorder for AI agents.
 
+<p align="center">
+  <img src="docs/images/01-architecture.svg" alt="AHP Architecture — Agent → Interceptors → PII Filters → AHPRecorder → Hash Chain + Evidence Store → Signing / Witness / Export" width="800"/>
+</p>
+
 ## Documents
 
 1. **This README** — quickstart and CLI reference
@@ -19,6 +23,10 @@ pip install ahp
 ```
 
 ## Quickstart
+
+<p align="center">
+  <img src="docs/images/10-sdk-usage.svg" alt="AHP SDK usage flow — Create Recorder, Record Actions, Verify & Inspect with CLI, Export to JSONL/CSV/OTLP" width="800"/>
+</p>
 
 Record an agent action and inspect the log:
 
