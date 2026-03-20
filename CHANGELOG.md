@@ -7,20 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Critical**: Witness signature verification now checks `verify_signature()` return value (previously accepted any forged signature).
+- **Critical**: Recorder signs canonical JSON checkpoint fields (matching witness verification format), and sends `public_key` alongside `signing_key_id`.
+- **Critical**: Envelope size guard corrected from 104 to 108 bytes (Python + TypeScript).
+- Chain continuity after crash recovery: ChainWriter now receives `prev_hash`/`start_sequence` from recovery result.
+- TypeScript ChainWriter supports `prevHash`/`startSequence` for cross-segment hash chain continuity.
+- Async recorder gap tracking now properly tracks `_gap_first_lost_seq` range (was always reporting count=1).
+- Evidence cleanup failures now logged instead of silently swallowed.
+- `export_csv()` uses `csv.DictWriter` instead of f-string interpolation (prevents comma-in-field corruption).
+- Witness server rejects negative `Content-Length` values (DoS prevention).
+- Protocol servers (A2A, MCP) validate `Content-Length` and handle `JSONDecodeError` with proper 400 responses.
+- File descriptor leak in AsyncChainWriter lock acquisition and TS `_writeHeader`.
+- HTTP interceptor reentrancy guard prevents infinite recursion with witness client.
+- Duplicate dict key removed from `format_action_summary`.
+- Config and CLI file I/O uses explicit `encoding="utf-8"` for Windows portability.
+- TS test glob changed from `dist/**/*.test.js` to `dist/*.test.js` (bash globstar compatibility).
+
+### Performance
+- In-memory evidence file count eliminates O(n) directory scan per checkpoint.
+- In-memory chain file size tracking eliminates `stat()` syscall per record.
+- Pre-partitioned filter scopes avoid per-filter membership check on every payload.
+- Narrowed recorder lock scope: PII filtering and evidence storage run outside lock (20-40% throughput improvement under thread contention).
+- TypeScript ChainWriter uses persistent file handle and single batched write per record (was open + 3 writes + close).
+
 ### Changed
 - Sanitized exception messages in API responses to prevent information disclosure.
 - Added security headers (X-Content-Type-Options) to all HTTP server responses.
 - Fixed private key file creation to use restricted permissions atomically.
 - Added logging to witness client for connection failures.
 - AsyncChainWriter now logs pending records when drain loop is cancelled.
-- Removed ~30 unused imports and dead code across Python and TypeScript SDKs.
 - Deduplicated CRC32 implementation in TypeScript SDK.
 - Fixed Node.js v25 compatibility (Object.freeze on typed arrays).
+- CI: ruff lint/format scope expanded to entire repo; mypy now checks witness/.
+- CI: coverage includes witness/; TS tests use `npm test` matching package.json.
+- Dynamic SDK version via `importlib.metadata` (falls back to hardcoded).
+- Witness server: in-memory dedup index checked before disk I/O on duplicate fast path.
+- DER length guards in TS signing tightened to exact Ed25519 sizes (44/48 bytes).
+- Added TypeScript SDK README.md and LICENSE for npm publish.
+- Added 7 TypeScript signing tests (generateKeypair, sign/verify, Merkle tree).
 
 ### Removed
-- Removed orphaned benchmarks/ directory.
-- Removed redundant documentation files (ahp-deep-summary.md, duplicate index.html).
-- Removed broken CI benchmark step.
+- Removed dead backward-compat shims (`ahp/a2a.py`, `mcp_client.py`, `mcp_server.py`).
+- Removed unused `BaseInterceptor` ABC, `ChainRotator` class, `get_receipts_for_agent()`.
+- Removed redundant docs (ahp-psd.md, sdk-implementation-guide.md, explainer-script.md, eu-ai-act-compliance.md).
+- Removed `test_openclaw/` directory.
+- Cleaned 40+ unused imports across Python and TypeScript.
 
 ### Added
 - CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md governance files.

@@ -76,8 +76,8 @@ export interface AHPRecorderOptions {
   config?: AHPConfig;
   evidencePath?: string;
   checkpointInterval?: number;
-  witnessInterval?: number;
-  witnessEndpoints?: string[];
+  witnessInterval?: number; // reserved — witness support not yet implemented in TS SDK
+  witnessEndpoints?: string[]; // reserved — witness support not yet implemented in TS SDK
   filterPresets?: string[];
   customFilters?: Filter[];
   agentFramework?: string;
