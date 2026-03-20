@@ -80,6 +80,8 @@ def _record_http_call(
             result=response_body,
             protocol=action.protocol,
             action_type=action.action_type,
+            result_status=action.result_status,
+            response_time_ms=action.response_time_ms,
             target_entity=url,
             model_id=action.model_id,
             input_token_count=action.input_token_count,
