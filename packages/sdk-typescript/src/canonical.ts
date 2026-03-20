@@ -308,9 +308,15 @@ export function readString(
   data: Uint8Array,
   offset: number
 ): [string, number] {
+  if (offset + 4 > data.length) {
+    throw new Error(`String length prefix overflows buffer at offset ${offset}`);
+  }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const length = view.getUint32(offset, true);
   offset += 4;
+  if (offset + length > data.length) {
+    throw new Error(`String data overflows buffer: need ${length} bytes at offset ${offset}, have ${data.length - offset}`);
+  }
   const strBytes = data.slice(offset, offset + length);
   const s = new TextDecoder().decode(strBytes);
   offset += length;

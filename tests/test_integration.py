@@ -717,15 +717,38 @@ class TestWitnessServerClient(unittest.TestCase):
         try:
             endpoint = f"http://localhost:{port}"
 
-            # Send checkpoint
+            # Send signed checkpoint (witness rejects unsigned)
+            import json
+
+            from ahp.core.signing import generate_keypair, sign
             from ahp.core.witness_client import get_identity, send_checkpoint
+
+            kp = generate_keypair()
+            agent_id = "test-agent-id"
+            chain_hash = "ab" * 32
+            sequence = 100
+            timestamp_ms = int(time.time() * 1000)
+
+            sign_data = json.dumps(
+                {
+                    "agent_id": agent_id,
+                    "chain_hash": chain_hash,
+                    "sequence": sequence,
+                    "timestamp_ms": timestamp_ms,
+                },
+                sort_keys=True,
+            ).encode()
+            sig_hex = sign(sign_data, kp.private_key_bytes).hex()
 
             receipt = send_checkpoint(
                 endpoint=endpoint,
-                agent_id="test-agent-id",
-                chain_hash="ab" * 32,
-                sequence=100,
-                timestamp_ms=int(time.time() * 1000),
+                agent_id=agent_id,
+                chain_hash=chain_hash,
+                sequence=sequence,
+                timestamp_ms=timestamp_ms,
+                signature=sig_hex,
+                signing_key_id=kp.key_id.hex(),
+                public_key=kp.public_key_bytes.hex(),
             )
 
             self.assertIsNotNone(receipt, "Witness returned no receipt")

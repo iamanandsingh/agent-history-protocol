@@ -110,8 +110,9 @@ def _verify_client_signature(body: dict) -> bool:
     public_key_hex = body.get("public_key")
 
     if not signature_hex:
-        # No signature provided — allow for backwards compatibility
-        return True
+        # Reject unsigned checkpoints — receipts must be backed by a verifiable signature
+        logger.warning("Checkpoint rejected: no signature provided")
+        return False
 
     if not public_key_hex:
         logger.warning("Checkpoint has signature but no public_key field — rejecting as possible tamper attempt.")
@@ -150,7 +151,11 @@ class WitnessHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/ahp/v1/checkpoints":
             # Check request size limit
-            content_length = int(self.headers.get("Content-Length", 0))
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+            except (ValueError, TypeError):
+                self.send_error(400, "Invalid Content-Length")
+                return
             if content_length < 0 or content_length > MAX_REQUEST_SIZE:
                 self.send_error(413, "Request body too large")
                 return

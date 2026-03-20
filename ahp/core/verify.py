@@ -41,10 +41,31 @@ def verify_chain(path: str) -> VerifyResult:
     records_checked = 0
 
     for i, stored in enumerate(reader.iter_records()):
-        envelope = parse_envelope(stored)
+        try:
+            envelope = parse_envelope(stored)
+        except (ValueError, KeyError) as exc:
+            return VerifyResult(
+                valid=False,
+                records_checked=i + 1,
+                gaps=gaps,
+                broken_at=i + 1,
+                error=f"Malformed record at index {i}: {exc}",
+            )
         seq = envelope["sequence"]
         prev_hash = envelope["prev_hash"]
-        record_type = envelope["record_type"]
+        record_type_val = envelope["record_type"]
+
+        # Validate enum value
+        try:
+            record_type = RecordType(record_type_val)
+        except ValueError:
+            return VerifyResult(
+                valid=False,
+                records_checked=i + 1,
+                gaps=gaps,
+                broken_at=seq,
+                error=f"Invalid record_type {record_type_val} at sequence {seq}",
+            )
 
         # Check hash chain
         if i == 0:

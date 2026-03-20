@@ -702,8 +702,14 @@ def parse_witness_payload(payload_bytes: bytes) -> dict:
 
 def _read_string(data: bytes, offset: int) -> tuple[str, int]:
     """Read a length-prefixed UTF-8 string. Returns (string, new_offset)."""
+    if offset + 4 > len(data):
+        raise ValueError(f"String length prefix overflows buffer at offset {offset}")
     length = struct.unpack("<I", data[offset : offset + 4])[0]
     offset += 4
+    if offset + length > len(data):
+        raise ValueError(
+            f"String data overflows buffer: need {length} bytes at offset {offset}, have {len(data) - offset}"
+        )
     s = data[offset : offset + length].decode("utf-8")
     offset += length
     return s, offset
