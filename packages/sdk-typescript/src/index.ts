@@ -118,6 +118,9 @@ export {
 
 export type { RecoveryResult } from "./recovery";
 
+// HTTP interceptor (auto-instrumentation)
+export { installHttpInterceptor, uninstallHttpInterceptor } from "./http-interceptor";
+
 // Recorder (main SDK entry point)
 export { AHPRecorder } from "./recorder";
 
