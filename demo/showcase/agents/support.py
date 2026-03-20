@@ -8,18 +8,14 @@ from typing import Dict, Optional
 from urllib.request import Request, urlopen
 
 from ahp.core.chain import ChainWriter
-from ahp.core.records import ActionPayload, Authorization, AuthorizationEntry, BootPayload
+from ahp.core.records import Authorization, AuthorizationEntry, BootPayload
 from ahp.core.types import (
-    ActionType,
     AuthorizationDecision,
     AuthorizationType,
     AuthorizerType,
     ChainLevel,
-    Protocol,
-    ResultStatus,
 )
 from ahp.core.uuid7 import uuid7
-from ahp.interceptors.mcp_helper import _hash16
 from demo.showcase.llm import GeminiClient
 from demo.showcase.tools import ToolExecutor
 
