@@ -184,7 +184,7 @@ function loadFromFile(filePath: string, agentName: string): AHPConfig {
   }
 
   const config = parseRawConfig(raw, agentName);
-  config.configSource = filePath;
+  config.configSource = path.basename(filePath);
   return config;
 }
 

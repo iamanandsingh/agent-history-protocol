@@ -9,6 +9,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 
+import { MAX_RECORD_SIZE } from "./validation";
 import {
   Record,
   RecordType,
@@ -345,6 +346,9 @@ export class ChainReader {
           break;
         }
         const length = lengthBuf.readUInt32LE(0);
+        if (length > MAX_RECORD_SIZE) {
+          break; // Record too large — likely corrupt
+        }
 
         // Read canonical bytes
         const stored = Buffer.alloc(length);

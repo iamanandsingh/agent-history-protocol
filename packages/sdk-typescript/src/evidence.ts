@@ -79,10 +79,11 @@ export class EvidenceStore {
   retrieve(hash16: Uint8Array): Uint8Array | null {
     const filename = Buffer.from(hash16).toString("hex");
     const filepath = path.join(this.path, filename);
-    if (!fs.existsSync(filepath)) {
-      return null;
+    try {
+      return new Uint8Array(fs.readFileSync(filepath));
+    } catch {
+      return null; // File not found or read error
     }
-    return new Uint8Array(fs.readFileSync(filepath));
   }
 
   /**

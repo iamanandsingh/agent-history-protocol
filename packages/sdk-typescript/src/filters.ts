@@ -161,10 +161,17 @@ export class FilterPipeline {
   /**
    * Apply all matching filters. Returns [filtered_bytes, was_redacted].
    */
+  // Maximum payload size for regex filtering (1MB). Larger payloads skip
+  // regex processing to prevent ReDoS on adversarial input.
+  static readonly MAX_FILTER_SIZE = 1_048_576;
+
   apply(
     payload: Uint8Array,
     scope: string = "parameters"
   ): [Uint8Array, boolean] {
+    if (payload.length > FilterPipeline.MAX_FILTER_SIZE) {
+      return [payload, false]; // Too large for safe regex processing
+    }
     let text: string;
     try {
       text = new TextDecoder("utf-8", { fatal: true }).decode(payload);

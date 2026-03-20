@@ -297,7 +297,7 @@ export class AHPRecorder {
       this._filters.hashPayload(parameters, "parameters");
     const [resultHash, filteredResult, resultRedacted] =
       this._filters.hashPayload(result, "results");
-    const redacted = paramRedacted || resultRedacted;
+    let redacted = paramRedacted || resultRedacted;
 
     // 2. Store evidence if configured
     let evidenceUri = "";
@@ -314,7 +314,17 @@ export class AHPRecorder {
       evidenceUri = "evidence://" + Buffer.from(paramHash).toString("hex");
     }
 
-    // 3. Build payload
+    // 3. Apply PII filters to string fields that go directly into the chain
+    let filteredTargetEntity = targetEntity;
+    if (targetEntity && this._filters.filters.length > 0) {
+      const [filteredTe, teRedacted] = this._filters.apply(
+        new TextEncoder().encode(targetEntity), "parameters"
+      );
+      filteredTargetEntity = new TextDecoder().decode(filteredTe);
+      if (teRedacted) redacted = true;
+    }
+
+    // 4. Build payload
     const payload = createActionPayload({
       parent_action_id: parentActionId,
       tool_name: toolName,
@@ -324,7 +334,7 @@ export class AHPRecorder {
       response_time_ms: responseTimeMs,
       protocol,
       action_type: actionType,
-      target_entity: targetEntity,
+      target_entity: filteredTargetEntity,
       evidence_uri: evidenceUri,
       redacted,
       model_id: modelId,
