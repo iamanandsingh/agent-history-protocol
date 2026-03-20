@@ -29,7 +29,14 @@ class MCPToolServer:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 content_length = int(self.headers.get("Content-Length", 0))
-                body = json.loads(self.rfile.read(content_length))
+                if content_length < 0 or content_length > 1_048_576:
+                    self.send_error(413, "Request too large")
+                    return
+                try:
+                    body = json.loads(self.rfile.read(content_length))
+                except (json.JSONDecodeError, ValueError):
+                    self.send_error(400, "Invalid JSON")
+                    return
 
                 # JSON-RPC 2.0 format
                 method = body.get("method", "")

@@ -59,6 +59,9 @@ class BufferWriter {
   /** Write a length-prefixed UTF-8 string (uint32 length prefix + bytes). */
   writeString(s: string): void {
     const encoded = textEncoder.encode(s);
+    if (encoded.length > 0xFFFFFFFF) {
+      throw new Error(`String too long for uint32 length prefix: ${encoded.length} bytes`);
+    }
     this.writeUint32(encoded.length);
     this.writeBytes(encoded);
   }
