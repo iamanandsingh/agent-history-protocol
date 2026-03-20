@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 from dataclasses import dataclass
 from typing import Optional
 
@@ -69,7 +70,7 @@ def verify_chain(path: str) -> VerifyResult:
 
         # Check hash chain
         if i == 0:
-            if prev_hash != ZERO_HASH_32:
+            if not hmac.compare_digest(prev_hash, ZERO_HASH_32):
                 return VerifyResult(
                     valid=False,
                     records_checked=i + 1,
@@ -81,7 +82,7 @@ def verify_chain(path: str) -> VerifyResult:
             if prev_stored is None:  # should never happen when i > 0
                 raise RuntimeError(f"prev_stored is None at record index {i}, sequence {seq}")
             expected_hash = hashlib.sha256(prev_stored).digest()
-            if prev_hash != expected_hash:
+            if not hmac.compare_digest(prev_hash, expected_hash):
                 return VerifyResult(
                     valid=False,
                     records_checked=i + 1,

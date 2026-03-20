@@ -43,7 +43,7 @@ class Filter:
 PRESETS = {
     "pci": [
         Filter(name="credit_card", pattern=r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b", replacement="[REDACTED:CC]"),
-        Filter(name="cvv", pattern=r"\b\d{3,4}\b(?=.*(?:cvv|cvc|security))", replacement="[REDACTED:CVV]"),
+        Filter(name="cvv", pattern=r"\b\d{3,4}\b(?=.{0,40}(?:cvv|cvc|security))", replacement="[REDACTED:CVV]"),
     ],
     "pii-us": [
         Filter(name="ssn", pattern=r"\b\d{3}-\d{2}-\d{4}\b", replacement="[REDACTED:SSN]"),

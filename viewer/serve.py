@@ -29,10 +29,19 @@ class ViewerHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=VIEWER_DIR, **kwargs)
 
+    MAX_UPLOAD_SIZE = 128 * 1024 * 1024  # 128MB
+
     def do_POST(self):
         """Accept chain file uploads from the viewer."""
         if self.path == "/api/chain":
-            content_length = int(self.headers.get("Content-Length", 0))
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+            except (ValueError, TypeError):
+                self.send_error(400, "Invalid Content-Length")
+                return
+            if content_length < 0 or content_length > self.MAX_UPLOAD_SIZE:
+                self.send_error(413, "Upload too large (max 128MB)")
+                return
             body = self.rfile.read(content_length)
             # Save uploaded chain to temp location
             upload_path = os.path.join(VIEWER_DIR, "_uploaded_chain.ahp")
