@@ -95,8 +95,7 @@ CHAIN VALID
 
 ## Specification
 
-Full protocol specification:
-https://github.com/ahp-protocol/ahp/blob/main/agent-history-protocol-spec.md
+Full protocol specification: [agent-history-protocol-spec.md](agent-history-protocol-spec.md)
 
 ## License
 
