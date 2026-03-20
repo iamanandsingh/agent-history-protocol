@@ -177,8 +177,7 @@ class WitnessHandler(BaseHTTPRequestHandler):
                 return
 
             with _receipts_lock:
-                # Check for duplicate (agent_id, sequence) — return existing receipt
-                data = _load_receipts()
+                # Check in-memory index first (avoids disk I/O on fast path)
                 existing = _find_existing_receipt(agent_id, sequence)
                 if existing is not None:
                     response = json.dumps(existing).encode()
@@ -221,6 +220,9 @@ class WitnessHandler(BaseHTTPRequestHandler):
                     "sequence": sequence,
                     "timestamp_ms": body.get("timestamp_ms"),
                 }
+
+                # Load from disk only when we need to append
+                data = _load_receipts()
 
                 # Rotate if at the size cap before appending
                 if len(data["receipts"]) >= MAX_RECEIPTS:

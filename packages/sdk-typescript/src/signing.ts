@@ -18,12 +18,17 @@ export interface KeyPair {
 export function generateKeypair(): KeyPair {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
 
-  const publicKeyBytes = new Uint8Array(
-    publicKey.export({ type: "spki", format: "der" }).subarray(-32)
-  );
-  const privateKeyBytes = new Uint8Array(
-    privateKey.export({ type: "pkcs8", format: "der" }).subarray(-32)
-  );
+  const spkiDer = publicKey.export({ type: "spki", format: "der" });
+  if (spkiDer.length < 32) {
+    throw new Error(`SPKI DER too short: ${spkiDer.length} bytes`);
+  }
+  const publicKeyBytes = new Uint8Array(spkiDer.subarray(-32));
+
+  const pkcs8Der = privateKey.export({ type: "pkcs8", format: "der" });
+  if (pkcs8Der.length < 32) {
+    throw new Error(`PKCS8 DER too short: ${pkcs8Der.length} bytes`);
+  }
+  const privateKeyBytes = new Uint8Array(pkcs8Der.subarray(-32));
 
   const keyId = new Uint8Array(
     crypto.createHash("sha256").update(publicKeyBytes).digest()

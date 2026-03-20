@@ -29,7 +29,7 @@ jobs:
           pip install pytest-cov
 
       - name: Run tests with coverage
-        run: pytest --cov=ahp --cov-report=xml tests/
+        run: pytest --cov=ahp --cov=witness --cov-report=xml tests/
 
   lint:
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy type check
-        run: mypy ahp/ --ignore-missing-imports --python-version 3.9 --exclude _pytest
+        run: mypy ahp/ witness/
 
   build:
     runs-on: ubuntu-latest

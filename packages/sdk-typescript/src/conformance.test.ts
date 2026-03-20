@@ -235,3 +235,66 @@ describe("Conformance: canonical bytes match Python SDK", () => {
     assert.ok(ZERO_UUID.every((b) => b === 0));
   });
 });
+
+// --- Signing tests ---
+import { generateKeypair, sign, verifySignature, computeMerkleRoot } from "./signing";
+
+describe("Signing: Ed25519 + Merkle tree", () => {
+  test("generateKeypair returns valid key sizes", () => {
+    const kp = generateKeypair();
+    assert.equal(kp.publicKeyBytes.length, 32);
+    assert.equal(kp.privateKeyBytes.length, 32);
+    assert.equal(kp.keyId.length, 32);
+    // keyId should be SHA-256 of public key
+    const expectedKeyId = createHash("sha256").update(kp.publicKeyBytes).digest();
+    assert.deepEqual(kp.keyId, new Uint8Array(expectedKeyId));
+  });
+
+  test("sign and verify round-trip", () => {
+    const kp = generateKeypair();
+    const message = Buffer.from("test message for signing");
+    const sig = sign(message, kp.privateKeyBytes);
+    assert.equal(sig.length, 64);
+    assert.ok(verifySignature(message, sig, kp.publicKeyBytes));
+  });
+
+  test("verify rejects wrong key", () => {
+    const kp1 = generateKeypair();
+    const kp2 = generateKeypair();
+    const message = Buffer.from("test message");
+    const sig = sign(message, kp1.privateKeyBytes);
+    assert.ok(!verifySignature(message, sig, kp2.publicKeyBytes));
+  });
+
+  test("verify rejects tampered message", () => {
+    const kp = generateKeypair();
+    const message = Buffer.from("original");
+    const sig = sign(message, kp.privateKeyBytes);
+    assert.ok(!verifySignature(Buffer.from("tampered"), sig, kp.publicKeyBytes));
+  });
+
+  test("computeMerkleRoot empty returns zeros", () => {
+    const root = computeMerkleRoot([]);
+    assert.equal(root.length, 32);
+    assert.ok(root.every((b) => b === 0));
+  });
+
+  test("computeMerkleRoot single hash", () => {
+    const hash = new Uint8Array(createHash("sha256").update("test").digest());
+    const root = computeMerkleRoot([hash]);
+    assert.equal(root.length, 32);
+    // Single leaf: SHA256(0x00 + hash)
+    const expected = createHash("sha256").update(Buffer.concat([Buffer.from([0x00]), hash])).digest();
+    assert.deepEqual(root, new Uint8Array(expected));
+  });
+
+  test("computeMerkleRoot multiple hashes is deterministic", () => {
+    const hashes = [1, 2, 3].map(i =>
+      new Uint8Array(createHash("sha256").update(`record_${i}`).digest())
+    );
+    const root1 = computeMerkleRoot(hashes);
+    const root2 = computeMerkleRoot(hashes);
+    assert.deepEqual(root1, root2);
+    assert.equal(root1.length, 32);
+  });
+});
