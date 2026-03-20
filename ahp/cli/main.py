@@ -448,7 +448,7 @@ def cmd_init(agent_name: Optional[str] = None) -> None:
         f"  key_file: ahp-key.priv\n"
     )
 
-    config_path.write_text(config_content)
+    config_path.write_text(config_content, encoding="utf-8")
     print(f"Created ahp.yaml for agent: {agent_name}")
     print(f"  agent_id: {agent_id}")
     print(f"  chain file: {agent_name}.ahp")
@@ -477,7 +477,7 @@ def cmd_keygen() -> None:
 
     kp = generate_keypair()
 
-    pub_path.write_text(kp.public_key_bytes.hex() + "\n")
+    pub_path.write_text(kp.public_key_bytes.hex() + "\n", encoding="utf-8")
 
     # Create private key with restricted permissions from the start
     fd = os.open(str(priv_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
