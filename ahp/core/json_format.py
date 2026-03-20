@@ -215,7 +215,6 @@ def format_action_summary(stored_bytes: bytes) -> dict:
         "tool_name": payload["tool_name"],
         "result_status": ResultStatus(payload["result_status"]).name,
         "response_time_ms": payload["response_time_ms"],
-        "action_type": ActionType(payload["action_type"]).name,
         "authorization": auth_display,
         "model_id": payload["model_id"],
     }

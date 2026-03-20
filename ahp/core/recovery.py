@@ -90,7 +90,7 @@ def scan_chain(path: str) -> RecoveryResult:
             try:
                 env = parse_envelope(stored)
                 last_valid_seq = env["sequence"]
-            except Exception as exc:
+            except (ValueError, KeyError, struct.error) as exc:
                 logger.debug("parse_envelope failed for valid record bytes: %s: %s", type(exc).__name__, exc)
 
     # Compute prev_hash for continuation

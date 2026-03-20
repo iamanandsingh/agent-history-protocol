@@ -90,7 +90,8 @@ def decode_tracestate_ahp(encoded: str) -> Optional[Dict]:
     """
     try:
         # Add padding back
-        padded = encoded + "=" * (4 - len(encoded) % 4) if len(encoded) % 4 else encoded
+        padding_needed = (4 - len(encoded) % 4) % 4
+        padded = encoded + "=" * padding_needed
         data = base64.urlsafe_b64decode(padded)
 
         if len(data) != 40:

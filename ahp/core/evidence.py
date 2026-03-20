@@ -165,7 +165,8 @@ class EvidenceStore:
                             filepath.name,
                             now - stat.st_mtime,
                         )
-                    except OSError:
+                    except OSError as exc:
+                        logger.debug("Failed to remove expired evidence %s: %s", filepath.name, exc)
                         surviving.append((filepath, stat))
                 else:
                     surviving.append((filepath, stat))
@@ -190,7 +191,8 @@ class EvidenceStore:
                         stat.st_size,
                         total_size,
                     )
-                except OSError:
+                except OSError as exc:
+                    logger.debug("Failed to remove evidence %s: %s", filepath.name, exc)
                     continue
 
         if removed > 0:

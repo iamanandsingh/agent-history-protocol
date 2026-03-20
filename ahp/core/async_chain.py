@@ -63,10 +63,15 @@ class AsyncChainWriter:
             import fcntl
 
             lock_path = str(self.path) + ".lock"
-            self._lock_file = open(lock_path, "w")
-            fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            f = open(lock_path, "w")
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                f.close()
+                raise
+            self._lock_file = f
         except (ImportError, OSError):
-            pass  # File locking not available on this platform
+            pass  # File locking not available or file already locked
 
     def _write_header(self) -> None:
         with open(self.path, "wb") as f:
@@ -114,6 +119,14 @@ class AsyncChainWriter:
             except OSError:
                 pass
             self._lock_file = None
+
+    def __del__(self) -> None:
+        """Release file lock on garbage collection (best-effort)."""
+        if self._lock_file:
+            try:
+                self._lock_file.close()
+            except OSError:
+                pass
 
     async def write_record(
         self, payload: Payload, session_id: Optional[bytes] = None, timestamp_ms: Optional[int] = None

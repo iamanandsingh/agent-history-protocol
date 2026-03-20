@@ -141,7 +141,8 @@ def install_http_interceptor(recorder: Any) -> None:
         # making its own HTTP call during AHP recording), pass through
         # directly to avoid infinite recursion and double-recording.
         if getattr(_local, "in_interceptor", False):
-            assert _original_urlopen is not None
+            if _original_urlopen is None:
+                raise RuntimeError("HTTP interceptor not installed")
             kw: dict[str, Any] = {}
             if timeout is not _GLOBAL_DEFAULT_TIMEOUT:
                 kw["timeout"] = timeout
