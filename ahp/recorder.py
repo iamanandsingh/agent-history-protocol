@@ -22,7 +22,9 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import tempfile
 import threading
 import time
@@ -333,8 +335,6 @@ class AHPRecorder(RecorderBase):
         public_key_hex = ""
         if self._level >= 2 and self._keypair is not None:
             # Sign canonical JSON of checkpoint fields (must match witness verification)
-            import json
-
             sign_data = json.dumps(
                 {
                     "agent_id": agent_id_hex,
@@ -516,12 +516,10 @@ class AHPRecorder(RecorderBase):
 
         self._chain.close()
 
-        import os as _os
-
         timestamp = int(time.time())
         segment_path = self._chain_path + f".{timestamp}.segment"
         try:
-            _os.rename(self._chain_path, segment_path)
+            os.rename(self._chain_path, segment_path)
         except OSError:
             self._log_warning("Failed to rename chain for rotation", exc_info=True)
 
