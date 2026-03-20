@@ -62,7 +62,7 @@ export const PRESETS: Record<string, Filter[]> = {
     ),
     new Filter(
       "cvv",
-      "\\b\\d{3,4}\\b(?=.*(?:cvv|cvc|security))",
+      "\\b\\d{3,4}\\b(?=.{0,40}(?:cvv|cvc|security))",
       "[REDACTED:CVV]"
     ),
   ],

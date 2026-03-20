@@ -261,11 +261,8 @@ export function verifyChainFromBytes(records: Uint8Array[]): VerifyResult {
   };
 }
 
-/** Compare two Uint8Arrays for equality. */
+/** Constant-time comparison of two Uint8Arrays (prevents timing side-channel). */
 function uint8ArrayEquals(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
+  return crypto.timingSafeEqual(a, b);
 }

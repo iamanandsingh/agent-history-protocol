@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
 import tempfile
@@ -116,7 +117,7 @@ class EvidenceStore:
         if payload is None:
             return False
         actual = hashlib.sha256(payload).digest()[:16]
-        return actual == hash_16
+        return hmac.compare_digest(actual, hash_16)
 
     def count(self) -> dict:
         """Count evidence files by status (in-memory, no directory scan)."""
