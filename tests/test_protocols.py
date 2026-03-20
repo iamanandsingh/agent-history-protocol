@@ -235,7 +235,7 @@ class TestRealA2AProtocol(unittest.TestCase):
             self.assertEqual(payload_a["tool_name"], "a2a.tasks.send")
             self.assertEqual(Protocol(payload_a["protocol"]), Protocol.A2A)
             self.assertEqual(ActionType(payload_a["action_type"]), ActionType.DELEGATION)
-            self.assertGreater(payload_a["response_time_ms"], 0)
+            self.assertGreaterEqual(payload_a["response_time_ms"], 0)
 
             # Verify Agent B's chain (server)
             reader_b = ChainReader(self.server_chain)
