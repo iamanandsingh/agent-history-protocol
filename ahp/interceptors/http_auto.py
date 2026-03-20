@@ -1,7 +1,12 @@
 """Transparent HTTP interceptor -- monkey-patches urllib.request.urlopen.
 
-When activated, ALL HTTP calls made via urllib.request are automatically
+When activated, HTTP calls made via ``urllib.request`` are automatically
 captured and recorded in AHP. No code changes needed in the agent.
+
+**Limitation:** This interceptor only covers ``urllib.request.urlopen``.
+Calls made through ``requests``, ``httpx``, ``aiohttp``, or other HTTP
+libraries are NOT intercepted. For those, use the explicit
+``recorder.record_action()`` API or a library-specific interceptor.
 
 Usage:
     from ahp.interceptors.http_auto import install_http_interceptor
@@ -9,8 +14,8 @@ Usage:
     recorder = AHPRecorder(agent_name="my-agent")
     install_http_interceptor(recorder)
 
-    # Now ANY urllib call is recorded:
-    urlopen("https://api.example.com/data")  # <- AHP records this automatically
+    # urllib calls are now recorded:
+    urlopen("https://api.example.com/data")  # <- AHP records this
 """
 
 from __future__ import annotations
