@@ -128,7 +128,15 @@ class AHPRecorder(RecorderBase):
                 self._log_warning("Chain recovery failed for %s", chain_path, exc_info=True)
                 self._fire_error_callback(exc, "chain_recovery")
 
-        self._chain = ChainWriter(chain_path)
+        # Continue chain from recovery state if available
+        if self._recovery_result is not None and self._recovery_result.records_verified > 0:
+            self._chain = ChainWriter(
+                chain_path,
+                prev_hash=self._recovery_result.last_prev_hash,
+                start_sequence=self._recovery_result.last_valid_seq,
+            )
+        else:
+            self._chain = ChainWriter(chain_path)
 
         # Rotation support: track segment size limit
         self._max_segment_bytes = DEFAULT_MAX_SEGMENT_BYTES  # 64MB

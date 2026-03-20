@@ -88,13 +88,19 @@ export class ChainWriter {
     agentId?: Uint8Array,
     sessionId?: Uint8Array,
     fsyncMode: string = "batch",
-    fsyncBatchSize: number = 1000
+    fsyncBatchSize: number = 1000,
+    prevHash?: Uint8Array,
+    startSequence: bigint = 0n
   ) {
     this.path = path;
     this.agentId = agentId ?? uuid7();
     this.sessionId = sessionId ?? uuid7();
     this._fsyncMode = fsyncMode;
     this._fsyncBatchSize = fsyncBatchSize;
+    this._sequence = startSequence;
+    if (prevHash) {
+      this._prevHash = new Uint8Array(prevHash);
+    }
 
     if (!fs.existsSync(path)) {
       this._writeHeader();

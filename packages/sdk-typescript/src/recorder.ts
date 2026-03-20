@@ -178,7 +178,20 @@ export class AHPRecorder {
       }
     }
 
-    this._chain = new ChainWriter(this._chainPath);
+    // Continue chain from recovery state if available
+    if (this._recoveryResult !== null && this._recoveryResult.recordsVerified > 0) {
+      this._chain = new ChainWriter(
+        this._chainPath,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        this._recoveryResult.lastPrevHash,
+        this._recoveryResult.lastValidSeq,
+      );
+    } else {
+      this._chain = new ChainWriter(this._chainPath);
+    }
 
     // Evidence store
     this._evidenceEnabled = this._cfg.evidenceRecord;
@@ -554,6 +567,10 @@ export class AHPRecorder {
 
     if (chainSize < this._maxSegmentBytes) return;
 
+    // Save chain state for cross-segment continuity
+    const prevHash = this._chain.prevHash;
+    const prevSequence = this._chain.sequence;
+
     // Close persistent file handle before renaming
     this._chain.close();
 
@@ -566,8 +583,16 @@ export class AHPRecorder {
       return; // Failed to rename; skip rotation
     }
 
-    // Open a fresh chain writer — note: ChainWriter constructor creates a new file
-    this._chain = new ChainWriter(this._chainPath);
+    // Open a fresh chain writer with hash chain continuity
+    this._chain = new ChainWriter(
+      this._chainPath,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      prevHash,
+      prevSequence,
+    );
 
     // Emit genesis records in the fresh segment
     this._emitBootRecord();
