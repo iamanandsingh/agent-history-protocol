@@ -322,9 +322,23 @@ class AHPRecorder(RecorderBase):
 
         sig_hex = ""
         key_id_hex = ""
+        public_key_hex = ""
         if self._level >= 2 and self._keypair is not None:
-            sig_hex = sign(self._chain.prev_hash, self._keypair.private_key_bytes).hex()
+            # Sign canonical JSON of checkpoint fields (must match witness verification)
+            import json
+
+            sign_data = json.dumps(
+                {
+                    "agent_id": agent_id_hex,
+                    "chain_hash": chain_hash_hex,
+                    "sequence": sequence,
+                    "timestamp_ms": timestamp_ms,
+                },
+                sort_keys=True,
+            ).encode()
+            sig_hex = sign(sign_data, self._keypair.private_key_bytes).hex()
             key_id_hex = self._keypair.key_id.hex()
+            public_key_hex = self._keypair.public_key_bytes.hex()
 
         for endpoint in self._witness_endpoints:
             try:
@@ -336,6 +350,7 @@ class AHPRecorder(RecorderBase):
                     timestamp_ms=timestamp_ms,
                     signature=sig_hex,
                     signing_key_id=key_id_hex,
+                    public_key=public_key_hex,
                 )
                 if receipt is not None:
                     witness_payload = WitnessPayload(

@@ -20,6 +20,7 @@ def send_checkpoint(
     timestamp_ms: int,
     signature: str = "",
     signing_key_id: str = "",
+    public_key: str = "",
 ) -> Optional[Dict]:
     """Send a checkpoint to a witness server. Returns receipt or None on failure."""
     if (
@@ -29,16 +30,17 @@ def send_checkpoint(
     ):
         raise ValueError(f"Witness endpoint must use HTTPS: {endpoint}")
     url = endpoint.rstrip("/") + "/ahp/v1/checkpoints"
-    payload = json.dumps(
-        {
-            "agent_id": agent_id,
-            "chain_hash": chain_hash,
-            "sequence": sequence,
-            "timestamp_ms": timestamp_ms,
-            "signature": signature,
-            "signing_key_id": signing_key_id,
-        }
-    ).encode()
+    body = {
+        "agent_id": agent_id,
+        "chain_hash": chain_hash,
+        "sequence": sequence,
+        "timestamp_ms": timestamp_ms,
+        "signature": signature,
+        "signing_key_id": signing_key_id,
+    }
+    if public_key:
+        body["public_key"] = public_key
+    payload = json.dumps(body).encode()
 
     retries = 3
     delays = [1, 2, 4]  # exponential backoff per Section 8.5
@@ -72,5 +74,4 @@ def get_identity(endpoint: str) -> Optional[Dict]:
             return json.loads(resp.read())
     except (URLError, OSError, json.JSONDecodeError) as e:
         logger.warning("Witness identity request failed: %s", e)
-        return None
         return None
