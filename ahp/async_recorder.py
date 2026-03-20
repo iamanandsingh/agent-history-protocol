@@ -213,8 +213,10 @@ class AsyncAHPRecorder(RecorderBase):
         try:
             return await self.record_action(**kwargs)
         except Exception as exc:
+            if not self._pending_gap:
+                self._gap_first_lost_seq = self.writer.sequence + 1
             self._pending_gap = True
-            self._gap_detail = str(exc)[:200]
+            self._gap_detail = str(exc)
             self._log_warning("Async safe_record failed (will emit GapRecord): %s", exc)
             self._fire_error_callback(exc, "async_safe_record")
             return None
@@ -222,18 +224,24 @@ class AsyncAHPRecorder(RecorderBase):
     async def _emit_pending_gap(self) -> None:
         """Emit a GapRecord for a previously failed recording."""
         try:
-            seq = self.writer.sequence
+            first_lost = self._gap_first_lost_seq
+            last_lost = self.writer.sequence
+            if first_lost > last_lost:
+                last_lost = first_lost
+            count = last_lost - first_lost + 1
+
             await self.writer.write_record(
                 GapPayload(
-                    first_lost_sequence=seq + 1,
-                    last_lost_sequence=seq + 1,
-                    count=1,
+                    first_lost_sequence=first_lost,
+                    last_lost_sequence=last_lost,
+                    count=count,
                     reason=GapReason.INTERCEPTOR_FAILURE,
                     detail=self._gap_detail,
                 )
             )
             self._pending_gap = False
             self._gap_detail = ""
+            self._gap_first_lost_seq = 0
         except Exception:
             pass
 
