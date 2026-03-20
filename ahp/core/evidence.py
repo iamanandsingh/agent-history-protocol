@@ -17,6 +17,13 @@ logger = logging.getLogger("ahp.evidence")
 class EvidenceStore:
     """Content-addressed evidence storage with optional lifecycle management.
 
+    Evidence payloads are indexed by truncated SHA-256 hashes (128 bits / 16 bytes).
+    This provides a collision resistance of ~2^64 (birthday bound), which is
+    acceptable for evidence deduplication. The truncation is a deliberate
+    spec design choice (Section 6) to reduce storage overhead for filenames
+    and hash fields in the chain. It does NOT affect the chain's own integrity,
+    which uses full 256-bit SHA-256 hashes.
+
     Parameters:
         path: Directory to store evidence files.
         max_size_bytes: Maximum total size of all evidence files.
@@ -106,10 +113,10 @@ class EvidenceStore:
 
     def retrieve(self, hash_16: bytes) -> Optional[bytes]:
         """Retrieve payload by its 16-byte hash. Returns None if missing."""
-        filepath = self.path / hash_16.hex()
-        if filepath.exists():
-            return filepath.read_bytes()
-        return None
+        try:
+            return (self.path / hash_16.hex()).read_bytes()
+        except FileNotFoundError:
+            return None
 
     def verify(self, hash_16: bytes) -> bool:
         """Verify evidence file matches its hash."""

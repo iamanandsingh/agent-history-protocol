@@ -81,6 +81,7 @@ export class ChainWriter {
   private _fsyncBatchSize: number;
   private _writesSinceFsync = 0;
   private _fd: number | null = null;
+  private _lockFd: number | null = null;
   private _bytesWritten = 0;
 
   constructor(
@@ -100,6 +101,15 @@ export class ChainWriter {
     this._sequence = startSequence;
     if (prevHash) {
       this._prevHash = new Uint8Array(prevHash);
+    }
+
+    // Acquire advisory file lock (write a marker to .lock file)
+    const lockPath = this.path + ".lock";
+    try {
+      this._lockFd = fs.openSync(lockPath, "wx"); // exclusive create — fails if exists
+    } catch {
+      // Lock file exists — another writer may be active.
+      // Warn but proceed (advisory lock, not mandatory).
     }
 
     if (!fs.existsSync(path)) {
@@ -285,6 +295,13 @@ export class ChainWriter {
     if (this._fd !== null) {
       try { fs.closeSync(this._fd); } catch { /* ignore */ }
       this._fd = null;
+    }
+    if (this._lockFd !== null) {
+      try {
+        fs.closeSync(this._lockFd);
+        fs.unlinkSync(this.path + ".lock");
+      } catch { /* ignore */ }
+      this._lockFd = null;
     }
   }
 }

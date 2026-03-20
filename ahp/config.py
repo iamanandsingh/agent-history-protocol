@@ -140,7 +140,7 @@ def _load_from_yaml(path: str, agent_name: str) -> AHPConfig:
         raw = yaml.safe_load(f) or {}
 
     config = _parse_raw_config(raw, agent_name)
-    config.config_source = path
+    config.config_source = os.path.basename(path)
     return config
 
 
@@ -150,7 +150,7 @@ def _load_from_json(path: str, agent_name: str) -> AHPConfig:
         raw = json.load(f)
 
     config = _parse_raw_config(raw, agent_name)
-    config.config_source = path
+    config.config_source = os.path.basename(path)
     return config
 
 
