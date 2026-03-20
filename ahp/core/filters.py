@@ -33,7 +33,8 @@ class Filter:
         """Apply filter. Returns (filtered_text, did_match)."""
         if self._compiled is None:
             self.compile()
-        assert self._compiled is not None
+        if self._compiled is None:
+            raise RuntimeError(f"Filter '{self.name}': compile() failed to set _compiled")
         result, count = self._compiled.subn(self.replacement, text)
         return result, count > 0
 

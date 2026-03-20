@@ -2,47 +2,43 @@
 
 Uses grpcio's generic handler (no protoc compilation needed).
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
 import tempfile
-import time
 import unittest
 from concurrent import futures
-from typing import Any
 
 import grpc
 
-from ahp.core.types import RecordType, ResultStatus, Protocol, ActionType
-from ahp.core.records import ActionPayload, BootPayload, Authorization
-from ahp.core.chain import ChainWriter, ChainReader, parse_envelope, parse_action_payload
-from ahp.core.verify import verify_chain
+from ahp.core.chain import ChainReader, ChainWriter
 from ahp.core.json_format import record_to_json
-from ahp.core.uuid7 import uuid7
+from ahp.core.verify import verify_chain
 from ahp.interceptors.grpc import AHPClientInterceptor
-
 
 # ================================================================
 # Real gRPC service (no .proto compilation needed)
 # ================================================================
 
+
 def _echo_handler(request: bytes, context: grpc.ServicerContext) -> bytes:
     """Simple echo handler — returns the request with a prefix."""
-    return b'ECHO:' + request
+    return b"ECHO:" + request
 
 
 def _add_handler(request: bytes, context: grpc.ServicerContext) -> bytes:
     """Add handler — parses JSON, adds numbers, returns result."""
     try:
         data = json.loads(request)
-        result = data.get('a', 0) + data.get('b', 0)
+        result = data.get("a", 0) + data.get("b", 0)
         return json.dumps({"sum": result}).encode()
     except Exception as e:
         context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
         context.set_details(str(e))
-        return b''
+        return b""
 
 
 def _fail_handler(request: bytes, context: grpc.ServicerContext) -> bytes:
@@ -58,15 +54,15 @@ def _create_generic_server(port: int = 0) -> tuple:
     Returns (server, port).
     """
     handlers = {
-        '/test.TestService/Echo': grpc.unary_unary_rpc_method_handler(_echo_handler),
-        '/test.TestService/Add': grpc.unary_unary_rpc_method_handler(_add_handler),
-        '/test.TestService/Fail': grpc.unary_unary_rpc_method_handler(_fail_handler),
+        "/test.TestService/Echo": grpc.unary_unary_rpc_method_handler(_echo_handler),
+        "/test.TestService/Add": grpc.unary_unary_rpc_method_handler(_add_handler),
+        "/test.TestService/Fail": grpc.unary_unary_rpc_method_handler(_fail_handler),
     }
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     server.add_generic_rpc_handlers([GenericHandler(handlers)])
 
-    actual_port = server.add_insecure_port(f'localhost:{port}')
+    actual_port = server.add_insecure_port(f"localhost:{port}")
     server.start()
 
     return server, actual_port
@@ -96,7 +92,7 @@ class TestRealGRPC(unittest.TestCase):
 
     def _make_channel(self, writer: ChainWriter) -> grpc.Channel:
         """Create intercepted gRPC channel."""
-        base_channel = grpc.insecure_channel(f'localhost:{self.port}')
+        base_channel = grpc.insecure_channel(f"localhost:{self.port}")
         interceptor = AHPClientInterceptor(writer)
         return grpc.intercept_channel(base_channel, interceptor)
 
@@ -107,13 +103,13 @@ class TestRealGRPC(unittest.TestCase):
 
         # Make REAL gRPC call
         response = channel.unary_unary(
-            '/test.TestService/Echo',
+            "/test.TestService/Echo",
             request_serializer=None,
             response_deserializer=None,
-        )(b'Hello gRPC')
+        )(b"Hello gRPC")
 
         # Verify real response
-        self.assertEqual(response, b'ECHO:Hello gRPC')
+        self.assertEqual(response, b"ECHO:Hello gRPC")
 
         # Verify AHP recorded it
         reader = ChainReader(self.chain_path)
@@ -121,15 +117,15 @@ class TestRealGRPC(unittest.TestCase):
         self.assertEqual(len(records), 1)
 
         j = record_to_json(records[0])
-        self.assertEqual(j['payload']['protocol'], 'GRPC')
-        self.assertEqual(j['payload']['tool_name'], 'test.TestService/Echo')
-        self.assertEqual(j['payload']['action_type'], 'TOOL_CALL')
-        self.assertEqual(j['payload']['result_status'], 'SUCCESS')
-        self.assertGreaterEqual(j['payload']['response_time_ms'], 0)  # localhost gRPC can be sub-ms
+        self.assertEqual(j["payload"]["protocol"], "GRPC")
+        self.assertEqual(j["payload"]["tool_name"], "test.TestService/Echo")
+        self.assertEqual(j["payload"]["action_type"], "TOOL_CALL")
+        self.assertEqual(j["payload"]["result_status"], "SUCCESS")
+        self.assertGreaterEqual(j["payload"]["response_time_ms"], 0)  # localhost gRPC can be sub-ms
 
         # Hashes are real (computed from actual request/response)
-        self.assertNotEqual(j['payload']['parameters_hash'], '00' * 16)
-        self.assertNotEqual(j['payload']['result_hash'], '00' * 16)
+        self.assertNotEqual(j["payload"]["parameters_hash"], "00" * 16)
+        self.assertNotEqual(j["payload"]["result_hash"], "00" * 16)
 
         # Chain valid
         self.assertTrue(verify_chain(self.chain_path).valid)
@@ -143,21 +139,21 @@ class TestRealGRPC(unittest.TestCase):
 
         request = json.dumps({"a": 17, "b": 25}).encode()
         response = channel.unary_unary(
-            '/test.TestService/Add',
+            "/test.TestService/Add",
             request_serializer=None,
             response_deserializer=None,
         )(request)
 
         result = json.loads(response)
-        self.assertEqual(result['sum'], 42)
+        self.assertEqual(result["sum"], 42)
 
         j = record_to_json(ChainReader(self.chain_path).read_all()[0])
-        self.assertEqual(j['payload']['protocol'], 'GRPC')
-        self.assertEqual(j['payload']['tool_name'], 'test.TestService/Add')
+        self.assertEqual(j["payload"]["protocol"], "GRPC")
+        self.assertEqual(j["payload"]["tool_name"], "test.TestService/Add")
 
         # Verify hash matches actual request
         expected_hash = hashlib.sha256(request).digest()[:16].hex()
-        self.assertEqual(j['payload']['parameters_hash'], expected_hash)
+        self.assertEqual(j["payload"]["parameters_hash"], expected_hash)
 
         channel.close()
 
@@ -168,10 +164,10 @@ class TestRealGRPC(unittest.TestCase):
 
         try:
             channel.unary_unary(
-                '/test.TestService/Fail',
+                "/test.TestService/Fail",
                 request_serializer=None,
                 response_deserializer=None,
-            )(b'please fail')
+            )(b"please fail")
             self.fail("Expected gRPC error")
         except grpc.RpcError as e:
             self.assertEqual(e.code(), grpc.StatusCode.INTERNAL)
@@ -182,8 +178,8 @@ class TestRealGRPC(unittest.TestCase):
         self.assertEqual(len(records), 1)
 
         j = record_to_json(records[0])
-        self.assertEqual(j['payload']['protocol'], 'GRPC')
-        self.assertEqual(j['payload']['result_status'], 'ERROR')
+        self.assertEqual(j["payload"]["protocol"], "GRPC")
+        self.assertEqual(j["payload"]["result_status"], "ERROR")
 
         channel.close()
 
@@ -194,11 +190,11 @@ class TestRealGRPC(unittest.TestCase):
 
         for i in range(5):
             response = channel.unary_unary(
-                '/test.TestService/Echo',
+                "/test.TestService/Echo",
                 request_serializer=None,
                 response_deserializer=None,
-            )(f'call {i}'.encode())
-            self.assertIn(b'ECHO:', response)
+            )(f"call {i}".encode())
+            self.assertIn(b"ECHO:", response)
 
         result = verify_chain(self.chain_path)
         self.assertTrue(result.valid)
@@ -214,22 +210,22 @@ class TestRealGRPC(unittest.TestCase):
         # Same request twice
         for _ in range(2):
             channel.unary_unary(
-                '/test.TestService/Echo',
+                "/test.TestService/Echo",
                 request_serializer=None,
                 response_deserializer=None,
-            )(b'deterministic')
+            )(b"deterministic")
 
         records = ChainReader(self.chain_path).read_all()
         j0 = record_to_json(records[0])
         j1 = record_to_json(records[1])
 
         # Same request → same parameters_hash
-        self.assertEqual(j0['payload']['parameters_hash'], j1['payload']['parameters_hash'])
+        self.assertEqual(j0["payload"]["parameters_hash"], j1["payload"]["parameters_hash"])
         # Same response → same result_hash
-        self.assertEqual(j0['payload']['result_hash'], j1['payload']['result_hash'])
+        self.assertEqual(j0["payload"]["result_hash"], j1["payload"]["result_hash"])
 
         channel.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

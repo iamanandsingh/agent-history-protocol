@@ -1,4 +1,5 @@
 """Tests for crash recovery (scan_chain, recover_chain, truncate_chain)."""
+
 from __future__ import annotations
 
 import os
@@ -8,8 +9,8 @@ from pathlib import Path
 
 from ahp.core.chain import ChainWriter
 from ahp.core.records import ActionPayload, Authorization
-from ahp.core.recovery import scan_chain, recover_chain, truncate_chain
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
+from ahp.core.recovery import recover_chain, scan_chain
+from ahp.core.types import ActionType, AuthorizationType, Protocol, ResultStatus
 from ahp.core.verify import verify_chain
 
 
@@ -21,13 +22,15 @@ class TestCrashRecovery(unittest.TestCase):
     def _write_n(self, n):
         writer = ChainWriter(self.chain_path)
         for i in range(n):
-            writer.write_record(ActionPayload(
-                tool_name=f"tool_{i}",
-                result_status=ResultStatus.SUCCESS,
-                protocol=Protocol.MCP,
-                action_type=ActionType.TOOL_CALL,
-                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-            ))
+            writer.write_record(
+                ActionPayload(
+                    tool_name=f"tool_{i}",
+                    result_status=ResultStatus.SUCCESS,
+                    protocol=Protocol.MCP,
+                    action_type=ActionType.TOOL_CALL,
+                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                )
+            )
         writer.close()
 
     def test_scan_clean_chain(self):
@@ -39,8 +42,8 @@ class TestCrashRecovery(unittest.TestCase):
 
     def test_scan_corrupt_tail(self):
         self._write_n(5)
-        with open(self.chain_path, 'ab') as f:
-            f.write(b'\xff' * 50)
+        with open(self.chain_path, "ab") as f:
+            f.write(b"\xff" * 50)
 
         result = scan_chain(self.chain_path)
         self.assertEqual(result.records_verified, 5)
@@ -50,8 +53,8 @@ class TestCrashRecovery(unittest.TestCase):
         self._write_n(5)
         clean_size = Path(self.chain_path).stat().st_size
 
-        with open(self.chain_path, 'ab') as f:
-            f.write(b'\xff' * 100)
+        with open(self.chain_path, "ab") as f:
+            f.write(b"\xff" * 100)
 
         self.assertGreater(Path(self.chain_path).stat().st_size, clean_size)
 
@@ -65,8 +68,8 @@ class TestCrashRecovery(unittest.TestCase):
     def test_recover_continues_chain(self):
         """After recovery, can continue writing to the chain."""
         self._write_n(3)
-        with open(self.chain_path, 'ab') as f:
-            f.write(b'\xde\xad' * 25)
+        with open(self.chain_path, "ab") as f:
+            f.write(b"\xde\xad" * 25)
 
         result = recover_chain(self.chain_path)
         self.assertEqual(result.last_valid_seq, 3)
@@ -76,13 +79,15 @@ class TestCrashRecovery(unittest.TestCase):
         writer2._prev_hash = result.last_prev_hash
         writer2._record_count = result.records_verified
 
-        writer2.write_record(ActionPayload(
-            tool_name="after_recovery",
-            result_status=ResultStatus.SUCCESS,
-            protocol=Protocol.MCP,
-            action_type=ActionType.TOOL_CALL,
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ))
+        writer2.write_record(
+            ActionPayload(
+                tool_name="after_recovery",
+                result_status=ResultStatus.SUCCESS,
+                protocol=Protocol.MCP,
+                action_type=ActionType.TOOL_CALL,
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            )
+        )
         writer2.close()
 
         verify_result = verify_chain(self.chain_path)
@@ -101,5 +106,5 @@ class TestCrashRecovery(unittest.TestCase):
         self.assertEqual(result.records_verified, 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

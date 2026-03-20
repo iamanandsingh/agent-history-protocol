@@ -23,21 +23,17 @@ pip install ahp
 Record an agent action and inspect the log:
 
 ```python
-from ahp.core.chain import ChainWriter
-from ahp.core.records import ActionPayload, Authorization, BootPayload
-from ahp.core.types import (
-    ResultStatus, Protocol, ActionType, AuthorizationType,
-)
+from ahp.recorder import AHPRecorder
+from ahp.core.types import Protocol, ActionType
 
-writer = ChainWriter("my-agent.ahp")
-writer.write_record(BootPayload(agent_name="my-agent"))
-writer.write_record(ActionPayload(
+recorder = AHPRecorder(agent_name="my-agent")
+recorder.record_action(
     tool_name="read_file",
-    result_status=ResultStatus.SUCCESS,
+    parameters=b'{"path": "/etc/motd"}',
+    result=b'"Welcome!"',
     protocol=Protocol.MCP,
     action_type=ActionType.TOOL_CALL,
-    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-))
+)
 ```
 
 Then view the log:

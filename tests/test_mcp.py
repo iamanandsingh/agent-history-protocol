@@ -1,4 +1,5 @@
 """Tests for MCP protocol wrapping (built-in JSON-RPC and mcp package detection)."""
+
 from __future__ import annotations
 
 import os
@@ -21,14 +22,15 @@ class TestMCPRealWrapping(unittest.TestCase):
     def test_patch_without_mcp(self):
         """If mcp not installed, patching returns False."""
         from ahp.interceptors.mcp_auto import patch_mcp_client
+
         if not HAS_MCP:
             result = patch_mcp_client(None)
             self.assertFalse(result)
 
     def test_fallback_json_rpc_mcp(self):
         """Built-in MCP JSON-RPC works regardless of the mcp package."""
-        from ahp.protocols.mcp_server import MCPToolServer
         from ahp.protocols.mcp_client import MCPClient
+        from ahp.protocols.mcp_server import MCPToolServer
 
         tmpdir = tempfile.mkdtemp()
         chain_path = os.path.join(tmpdir, "mcp_fallback.ahp")
@@ -50,5 +52,5 @@ class TestMCPRealWrapping(unittest.TestCase):
             writer.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

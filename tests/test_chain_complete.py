@@ -1,30 +1,33 @@
 """Complete chain tests — gap, recovery, checkpoint, threading, multi-session."""
+
 from __future__ import annotations
 
-import hashlib
 import os
-import struct
 import tempfile
 import threading
 import unittest
-import zlib
-from typing import Optional
 
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, GapReason, RecoveryMethod,
-    ZERO_HASH_32, SCHEMA_VERSION,
+from ahp.core.chain import (
+    ChainReader,
+    ChainWriter,
+    parse_checkpoint_payload,
+    parse_envelope,
 )
 from ahp.core.records import (
-    ActionPayload, BootPayload, GapPayload, CheckpointPayload,
-    RecoveryPayload, Authorization,
+    ActionPayload,
+    Authorization,
+    GapPayload,
 )
-from ahp.core.chain import (
-    ChainWriter, ChainReader, parse_envelope, parse_gap_payload,
-    parse_checkpoint_payload, HEADER_SIZE,
+from ahp.core.types import (
+    ActionType,
+    AuthorizationType,
+    GapReason,
+    Protocol,
+    RecordType,
+    RecoveryMethod,
+    ResultStatus,
 )
 from ahp.core.verify import verify_chain
-from ahp.core.canonical import canonical_bytes
 
 
 def _action(tool_name: str = "test_tool") -> ActionPayload:
@@ -134,9 +137,9 @@ class TestCheckpoint(unittest.TestCase):
         self.assertEqual(len(all_bytes), 6)
 
         env = parse_envelope(all_bytes[5])
-        cp_data = parse_checkpoint_payload(env['payload_bytes'])
-        self.assertEqual(cp_data['record_count'], 6)
-        self.assertEqual(cp_data['gap_count'], 0)
+        cp_data = parse_checkpoint_payload(env["payload_bytes"])
+        self.assertEqual(cp_data["record_count"], 6)
+        self.assertEqual(cp_data["gap_count"], 0)
 
         # Chain should still verify
         result = verify_chain(self.chain_path)
@@ -221,7 +224,7 @@ class TestThreadSafety(unittest.TestCase):
         sequences = set()
         for stored in all_bytes:
             env = parse_envelope(stored)
-            sequences.add(env['sequence'])
+            sequences.add(env["sequence"])
         self.assertEqual(sequences, set(range(1, 101)))
 
         # verify_chain should pass
@@ -260,7 +263,7 @@ class TestInterleavedSessions(unittest.TestCase):
         sessions_seen = set()
         for stored in all_bytes:
             env = parse_envelope(stored)
-            sessions_seen.add(env['session_id'])
+            sessions_seen.add(env["session_id"])
 
         self.assertIn(session_a, sessions_seen)
         self.assertIn(session_b, sessions_seen)
@@ -307,5 +310,5 @@ class TestMultipleGaps(unittest.TestCase):
         self.assertEqual(result.records_checked, 9)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

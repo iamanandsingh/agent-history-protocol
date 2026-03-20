@@ -3,17 +3,15 @@
 Makes REAL HTTP calls to Google's Gemini API.
 AHP records every call automatically.
 """
+
 from __future__ import annotations
 
-import hashlib
 import json
 import time
-from typing import Optional, Dict, Any, List
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
+from typing import Any, Dict, List, Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
-from ahp.core.records import ActionPayload, Authorization
 from ahp.core.chain import ChainWriter
 from ahp.core.uuid7 import uuid7
 from ahp.interceptors.http_helper import create_action_from_http
@@ -22,8 +20,9 @@ from ahp.interceptors.http_helper import create_action_from_http
 class GeminiClient:
     """Calls Gemini API and records every call in AHP chain."""
 
-    def __init__(self, api_key: str, model: str, endpoint: str,
-                 writer: ChainWriter, session_id: Optional[bytes] = None):
+    def __init__(
+        self, api_key: str, model: str, endpoint: str, writer: ChainWriter, session_id: Optional[bytes] = None
+    ):
         self.api_key = api_key
         self.model = model
         self.endpoint = endpoint
@@ -31,8 +30,7 @@ class GeminiClient:
         self.session_id = session_id or uuid7()
         self.last_record_id: Optional[bytes] = None
 
-    def chat(self, messages: List[Dict[str, str]],
-             system_prompt: str = "") -> Dict[str, Any]:
+    def chat(self, messages: List[Dict[str, str]], system_prompt: str = "") -> Dict[str, Any]:
         """Send messages to Gemini and return the response.
 
         Messages format: [{"role": "user", "content": "..."}, ...]
@@ -42,16 +40,16 @@ class GeminiClient:
         contents = []
         for msg in messages:
             role = "user" if msg["role"] == "user" else "model"
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg["content"]}],
-            })
+            contents.append(
+                {
+                    "role": role,
+                    "parts": [{"text": msg["content"]}],
+                }
+            )
 
         body = {"contents": contents}
         if system_prompt:
-            body["systemInstruction"] = {
-                "parts": [{"text": system_prompt}]
-            }
+            body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
         body["generationConfig"] = {
             "temperature": 0.7,
             "maxOutputTokens": 1024,
@@ -63,16 +61,15 @@ class GeminiClient:
         # Make REAL HTTP call
         start = time.time()
         status_code = 200
-        response_bytes = b''
+        response_bytes = b""
 
         try:
-            req = Request(url, data=request_bytes,
-                         headers={"Content-Type": "application/json"})
+            req = Request(url, data=request_bytes, headers={"Content-Type": "application/json"})
             with urlopen(req, timeout=30) as resp:
                 response_bytes = resp.read()
                 status_code = resp.status
         except HTTPError as e:
-            response_bytes = e.read() if hasattr(e, 'read') else str(e).encode()
+            response_bytes = e.read() if hasattr(e, "read") else str(e).encode()
             status_code = e.code
         except URLError as e:
             response_bytes = str(e).encode()
@@ -108,11 +105,10 @@ class GeminiClient:
         result = self._parse_response(response_bytes, status_code, duration_ms)
         return result
 
-    def _parse_response(self, response_bytes: bytes, status_code: int,
-                        duration_ms: int) -> Dict[str, Any]:
+    def _parse_response(self, response_bytes: bytes, status_code: int, duration_ms: int) -> Dict[str, Any]:
         """Parse Gemini API response."""
         if status_code != 200:
-            error_text = response_bytes.decode('utf-8', errors='replace')
+            error_text = response_bytes.decode("utf-8", errors="replace")
             return {
                 "text": f"[ERROR {status_code}]: {error_text[:200]}",
                 "input_tokens": 0,

@@ -6,19 +6,19 @@ explicit instrumentation.
 
 Requires Python >= 3.9.
 """
+
 from __future__ import annotations
 
 import http.server
 import os
 import tempfile
 import threading
-import time
 import unittest
 import urllib.error
 import urllib.request
-from typing import Any, Optional
+from typing import Any
 
-from ahp.core.chain import ChainReader, parse_envelope, parse_action_payload
+from ahp.core.chain import ChainReader, parse_action_payload, parse_envelope
 from ahp.core.records import RecordType
 from ahp.core.types import ActionType, Protocol
 from ahp.core.verify import verify_chain
@@ -28,10 +28,10 @@ from ahp.interceptors.http_auto import (
 )
 from ahp.recorder import AHPRecorder
 
-
 # ---------------------------------------------------------------------------
 # Helpers: minimal HTTP server
 # ---------------------------------------------------------------------------
+
 
 class _TestHandler(http.server.BaseHTTPRequestHandler):
     """Simple handler that echoes back a known body or returns errors."""
@@ -95,6 +95,7 @@ def _action_records(chain_path: str):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestTransparentCapture(unittest.TestCase):
     """Install interceptor, make a plain urlopen call, verify it was recorded."""

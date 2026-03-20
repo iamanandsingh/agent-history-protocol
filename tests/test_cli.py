@@ -1,4 +1,5 @@
 """Tests for CLI commands: ahp trace, ahp gaps."""
+
 from __future__ import annotations
 
 import io
@@ -8,8 +9,8 @@ import tempfile
 import unittest
 
 from ahp.core.chain import ChainWriter
-from ahp.core.records import ActionPayload, BootPayload, Authorization
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType, GapReason
+from ahp.core.records import ActionPayload, Authorization, BootPayload
+from ahp.core.types import ActionType, AuthorizationType, GapReason, Protocol, ResultStatus
 from ahp.core.uuid7 import uuid7
 
 
@@ -28,22 +29,28 @@ class TestCLITraceWithRealData(unittest.TestCase):
         writer = ChainWriter(self.chain_path)
         writer.write_record(BootPayload(agent_name="gap-test"), session_id=self.session_id)
         for i in range(3):
-            writer.write_record(ActionPayload(
-                tool_name=f"tool_{i}",
+            writer.write_record(
+                ActionPayload(
+                    tool_name=f"tool_{i}",
+                    result_status=ResultStatus.SUCCESS,
+                    protocol=Protocol.MCP,
+                    action_type=ActionType.TOOL_CALL,
+                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                ),
+                session_id=self.session_id,
+            )
+
+        writer.write_gap(5, 8, GapReason.CRASH, "test crash gap")
+        writer.write_record(
+            ActionPayload(
+                tool_name="after_gap",
                 result_status=ResultStatus.SUCCESS,
                 protocol=Protocol.MCP,
                 action_type=ActionType.TOOL_CALL,
                 authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-            ), session_id=self.session_id)
-
-        writer.write_gap(5, 8, GapReason.CRASH, "test crash gap")
-        writer.write_record(ActionPayload(
-            tool_name="after_gap",
-            result_status=ResultStatus.SUCCESS,
-            protocol=Protocol.MCP,
-            action_type=ActionType.TOOL_CALL,
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ), session_id=self.session_id)
+            ),
+            session_id=self.session_id,
+        )
         writer.close()
 
         captured = io.StringIO()
@@ -67,23 +74,29 @@ class TestCLITraceWithRealData(unittest.TestCase):
         session = uuid7()
         session_str = uuid7_to_str(session)
 
-        inference = writer.write_record(ActionPayload(
-            tool_name="anthropic.messages",
-            result_status=ResultStatus.SUCCESS,
-            protocol=Protocol.HTTP,
-            action_type=ActionType.INFERENCE,
-            model_id="claude-sonnet-4-6",
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ), session_id=session)
+        inference = writer.write_record(
+            ActionPayload(
+                tool_name="anthropic.messages",
+                result_status=ResultStatus.SUCCESS,
+                protocol=Protocol.HTTP,
+                action_type=ActionType.INFERENCE,
+                model_id="claude-sonnet-4-6",
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            ),
+            session_id=session,
+        )
 
-        writer.write_record(ActionPayload(
-            parent_action_id=inference.record_id,
-            tool_name="search_docs",
-            result_status=ResultStatus.SUCCESS,
-            protocol=Protocol.MCP,
-            action_type=ActionType.TOOL_CALL,
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ), session_id=session)
+        writer.write_record(
+            ActionPayload(
+                parent_action_id=inference.record_id,
+                tool_name="search_docs",
+                result_status=ResultStatus.SUCCESS,
+                protocol=Protocol.MCP,
+                action_type=ActionType.TOOL_CALL,
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            ),
+            session_id=session,
+        )
         writer.close()
 
         captured = io.StringIO()
@@ -99,5 +112,5 @@ class TestCLITraceWithRealData(unittest.TestCase):
         self.assertIn("search_docs", output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -1,13 +1,14 @@
 """Tests for ChainReader streaming operations and file locking."""
+
 from __future__ import annotations
 
 import os
 import tempfile
 import unittest
 
-from ahp.core.chain import ChainWriter, ChainReader, parse_envelope
-from ahp.core.records import ActionPayload, BootPayload, Authorization
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType
+from ahp.core.chain import ChainReader, ChainWriter, parse_envelope
+from ahp.core.records import ActionPayload, Authorization, BootPayload
+from ahp.core.types import ActionType, AuthorizationType, Protocol, ResultStatus
 
 
 class TestStreamingReader(unittest.TestCase):
@@ -18,13 +19,15 @@ class TestStreamingReader(unittest.TestCase):
     def _write_n_records(self, n):
         writer = ChainWriter(self.chain_path)
         for i in range(n):
-            writer.write_record(ActionPayload(
-                tool_name=f"tool_{i}",
-                result_status=ResultStatus.SUCCESS,
-                protocol=Protocol.MCP,
-                action_type=ActionType.TOOL_CALL,
-                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-            ))
+            writer.write_record(
+                ActionPayload(
+                    tool_name=f"tool_{i}",
+                    result_status=ResultStatus.SUCCESS,
+                    protocol=Protocol.MCP,
+                    action_type=ActionType.TOOL_CALL,
+                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                )
+            )
         writer.close()
         return writer
 
@@ -57,8 +60,8 @@ class TestStreamingReader(unittest.TestCase):
         self.assertEqual(len(records), 6)
         for stored in records:
             env = parse_envelope(stored)
-            self.assertGreaterEqual(env['sequence'], 5)
-            self.assertLessEqual(env['sequence'], 10)
+            self.assertGreaterEqual(env["sequence"], 5)
+            self.assertLessEqual(env["sequence"], 10)
 
     def test_read_range_beyond(self):
         self._write_n_records(20)
@@ -87,7 +90,7 @@ class TestFileLocking(unittest.TestCase):
         writer1 = ChainWriter(self.chain_path)
         try:
             with self.assertRaises(RuntimeError) as ctx:
-                writer2 = ChainWriter(self.chain_path)
+                ChainWriter(self.chain_path)
             self.assertIn("locked", str(ctx.exception).lower())
         except unittest.SkipTest:
             pass  # fcntl not available
@@ -106,5 +109,5 @@ class TestFileLocking(unittest.TestCase):
         writer2.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

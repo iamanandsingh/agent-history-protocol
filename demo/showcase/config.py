@@ -2,7 +2,9 @@
 
 Set your Gemini API key here or via environment variable GEMINI_API_KEY.
 """
+
 from __future__ import annotations
+
 import os
 
 # Gemini API configuration

@@ -1,25 +1,30 @@
 """Tests for AHPRecorder -- the main SDK entry point."""
+
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import tempfile
 import unittest
-from typing import Optional
 
-from ahp.recorder import AHPRecorder
-from ahp.config import AHPConfig, FilterConfig, WitnessConfig
-from ahp.core.chain import ChainReader, parse_envelope, parse_action_payload, parse_boot_payload, parse_checkpoint_payload, parse_key_payload
-from ahp.core.filters import Filter
-from ahp.core.records import Authorization, ActionPayload
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, ChainLevel, GapReason,
-    ZERO_HASH_32,
+from ahp.config import AHPConfig
+from ahp.core.chain import (
+    ChainReader,
+    parse_action_payload,
+    parse_boot_payload,
+    parse_checkpoint_payload,
+    parse_envelope,
+    parse_key_payload,
 )
 from ahp.core.signing import HAS_CRYPTO
+from ahp.core.types import (
+    ZERO_HASH_32,
+    ActionType,
+    ChainLevel,
+    Protocol,
+    RecordType,
+)
 from ahp.core.verify import verify_chain
+from ahp.recorder import AHPRecorder
 
 
 def _tmpdir():
@@ -56,7 +61,7 @@ class TestBasicRecording(unittest.TestCase):
 
         # Verify chain integrity
         result = verify_chain(self.chain_path)
-        self.assertTrue(result.valid, "Chain invalid: %s" % getattr(result, 'error', ''))
+        self.assertTrue(result.valid, "Chain invalid: %s" % getattr(result, "error", ""))
 
         # Boot record + 3 action records = 4 total
         reader = ChainReader(self.chain_path)
@@ -65,12 +70,12 @@ class TestBasicRecording(unittest.TestCase):
 
         # First record is BOOT
         env0 = parse_envelope(records[0])
-        self.assertEqual(env0['record_type'], RecordType.BOOT)
+        self.assertEqual(env0["record_type"], RecordType.BOOT)
 
         # Remaining 3 are ACTION
         for i in range(1, 4):
             env = parse_envelope(records[i])
-            self.assertEqual(env['record_type'], RecordType.ACTION)
+            self.assertEqual(env["record_type"], RecordType.ACTION)
 
 
 class TestPIIFiltering(unittest.TestCase):
@@ -108,14 +113,14 @@ class TestPIIFiltering(unittest.TestCase):
         action_bytes = None
         for stored in records:
             env = parse_envelope(stored)
-            if env['record_type'] == RecordType.ACTION:
+            if env["record_type"] == RecordType.ACTION:
                 action_bytes = stored
                 break
 
         self.assertIsNotNone(action_bytes, "No ACTION record found in chain")
         env = parse_envelope(action_bytes)
-        action_data = parse_action_payload(env['payload_bytes'])
-        self.assertTrue(action_data['redacted'], "Expected redacted=True for CC data")
+        action_data = parse_action_payload(env["payload_bytes"])
+        self.assertTrue(action_data["redacted"], "Expected redacted=True for CC data")
 
 
 class TestEvidenceStored(unittest.TestCase):
@@ -142,7 +147,7 @@ class TestEvidenceStored(unittest.TestCase):
 
         self.assertIsNotNone(recorder.evidence_store)
 
-        rec = recorder.record_action(
+        recorder.record_action(
             tool_name="search",
             parameters=b'{"query": "return policy"}',
             result=b'{"matches": ["policy1", "policy2"]}',
@@ -196,11 +201,12 @@ class TestAutoCheckpoint(unittest.TestCase):
         checkpoint_count = 0
         for stored in records:
             env = parse_envelope(stored)
-            if env['record_type'] == RecordType.CHECKPOINT:
+            if env["record_type"] == RecordType.CHECKPOINT:
                 checkpoint_count += 1
 
         self.assertGreaterEqual(
-            checkpoint_count, 1,
+            checkpoint_count,
+            1,
             "Expected at least 1 checkpoint record, found %d" % checkpoint_count,
         )
 
@@ -264,7 +270,7 @@ class TestFailOpen(unittest.TestCase):
         gap_found = False
         for stored in records:
             env = parse_envelope(stored)
-            if env['record_type'] == RecordType.GAP:
+            if env["record_type"] == RecordType.GAP:
                 gap_found = True
                 break
 
@@ -279,7 +285,7 @@ class TestBootRecord(unittest.TestCase):
         self.chain_path = os.path.join(self.tmpdir, "boot.ahp")
 
     def test_boot_record(self):
-        recorder = AHPRecorder(
+        AHPRecorder(
             agent_name="boot-agent",
             chain_path=self.chain_path,
             level=2,
@@ -293,16 +299,16 @@ class TestBootRecord(unittest.TestCase):
         # First record must be BOOT
         self.assertGreater(len(records), 0, "No records in chain")
         env = parse_envelope(records[0])
-        self.assertEqual(env['record_type'], RecordType.BOOT)
-        self.assertEqual(env['sequence'], 1)
+        self.assertEqual(env["record_type"], RecordType.BOOT)
+        self.assertEqual(env["sequence"], 1)
 
         # Parse boot payload and verify fields
-        boot_data = parse_boot_payload(env['payload_bytes'])
-        self.assertEqual(boot_data['agent_name'], "boot-agent")
-        self.assertEqual(boot_data['sdk_name'], "ahp-python")
-        self.assertEqual(boot_data['chain_level'], ChainLevel.LEVEL_2)
-        self.assertEqual(boot_data['agent_framework'], "langchain")
-        self.assertIn("python", boot_data['runtime'].lower())
+        boot_data = parse_boot_payload(env["payload_bytes"])
+        self.assertEqual(boot_data["agent_name"], "boot-agent")
+        self.assertEqual(boot_data["sdk_name"], "ahp-python")
+        self.assertEqual(boot_data["chain_level"], ChainLevel.LEVEL_2)
+        self.assertEqual(boot_data["agent_framework"], "langchain")
+        self.assertIn("python", boot_data["runtime"].lower())
 
 
 class TestFromConfig(unittest.TestCase):
@@ -337,7 +343,8 @@ class TestFromConfig(unittest.TestCase):
 
         # Filters should include PCI + credentials presets
         self.assertGreater(
-            len(recorder.filter_pipeline.filters), 0,
+            len(recorder.filter_pipeline.filters),
+            0,
             "Expected filters from presets",
         )
 
@@ -369,12 +376,12 @@ class TestSigningLevel2(unittest.TestCase):
 
         # Second record should be KEY (KeyGenesis)
         env1 = parse_envelope(records[1])
-        self.assertEqual(env1['record_type'], RecordType.KEY)
+        self.assertEqual(env1["record_type"], RecordType.KEY)
 
         # Parse key payload
-        key_data = parse_key_payload(env1['payload_bytes'])
-        self.assertEqual(key_data['public_key'], recorder.keypair.public_key_bytes)
-        self.assertEqual(key_data['key_id'], recorder.keypair.key_id)
+        key_data = parse_key_payload(env1["payload_bytes"])
+        self.assertEqual(key_data["public_key"], recorder.keypair.public_key_bytes)
+        self.assertEqual(key_data["key_id"], recorder.keypair.key_id)
 
         # Record a few actions then emit checkpoint
         for i in range(3):
@@ -396,25 +403,25 @@ class TestSigningLevel2(unittest.TestCase):
         cp_bytes = None
         for stored in all_records:
             env = parse_envelope(stored)
-            if env['record_type'] == RecordType.CHECKPOINT:
+            if env["record_type"] == RecordType.CHECKPOINT:
                 cp_bytes = stored
                 break
 
         self.assertIsNotNone(cp_bytes, "No CHECKPOINT record found")
         cp_env = parse_envelope(cp_bytes)
-        cp_data = parse_checkpoint_payload(cp_env['payload_bytes'])
+        cp_data = parse_checkpoint_payload(cp_env["payload_bytes"])
 
         # When cryptography is installed, signature should not be all zeros.
         # Without the library, sign() returns a 64-byte zero stub.
         if HAS_CRYPTO:
-            self.assertNotEqual(cp_data['signature'], b'\x00' * 64)
+            self.assertNotEqual(cp_data["signature"], b"\x00" * 64)
         else:
             # Stub signature -- still 64 bytes
-            self.assertEqual(len(cp_data['signature']), 64)
+            self.assertEqual(len(cp_data["signature"]), 64)
         # Merkle root should not be all zeros (we had records)
-        self.assertNotEqual(cp_data['merkle_root'], ZERO_HASH_32)
+        self.assertNotEqual(cp_data["merkle_root"], ZERO_HASH_32)
         # Signing key ID should match our keypair
-        self.assertEqual(cp_data['signing_key_id'], recorder.keypair.key_id)
+        self.assertEqual(cp_data["signing_key_id"], recorder.keypair.key_id)
 
 
 class TestInferenceRecording(unittest.TestCase):
@@ -453,19 +460,19 @@ class TestInferenceRecording(unittest.TestCase):
         action_bytes = None
         for stored in records:
             env = parse_envelope(stored)
-            if env['record_type'] == RecordType.ACTION:
+            if env["record_type"] == RecordType.ACTION:
                 action_bytes = stored
                 break
 
         self.assertIsNotNone(action_bytes)
         env = parse_envelope(action_bytes)
-        action_data = parse_action_payload(env['payload_bytes'])
+        action_data = parse_action_payload(env["payload_bytes"])
 
-        self.assertEqual(action_data['action_type'], ActionType.INFERENCE)
-        self.assertEqual(action_data['model_id'], "gpt-4-turbo")
-        self.assertEqual(action_data['input_token_count'], 15)
-        self.assertEqual(action_data['output_token_count'], 3)
-        self.assertEqual(action_data['response_time_ms'], 450)
+        self.assertEqual(action_data["action_type"], ActionType.INFERENCE)
+        self.assertEqual(action_data["model_id"], "gpt-4-turbo")
+        self.assertEqual(action_data["input_token_count"], 15)
+        self.assertEqual(action_data["output_token_count"], 3)
+        self.assertEqual(action_data["response_time_ms"], 450)
 
 
 class TestChainIntegrityAcrossOperations(unittest.TestCase):
@@ -503,7 +510,7 @@ class TestChainIntegrityAcrossOperations(unittest.TestCase):
         recorder.record_action(
             tool_name="payment",
             parameters=b'{"card": "4111-1111-1111-1111"}',
-            result=b'{}',
+            result=b"{}",
             protocol=Protocol.HTTP,
             action_type=ActionType.TOOL_CALL,
         )
@@ -522,8 +529,8 @@ class TestChainIntegrityAcrossOperations(unittest.TestCase):
 
         # Chain should still verify
         result = verify_chain(self.chain_path)
-        self.assertTrue(result.valid, "Chain invalid: %s" % getattr(result, 'error', ''))
+        self.assertTrue(result.valid, "Chain invalid: %s" % getattr(result, "error", ""))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

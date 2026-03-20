@@ -6,6 +6,7 @@ DEFAULT_MAX_SEGMENT_BYTES (64 MiB).  The old file is renamed to
 path, preserving the hash-chain link via ``prev_hash`` and
 ``start_sequence``.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -16,11 +17,10 @@ import unittest
 from pathlib import Path
 
 from ahp.core.chain import ChainReader, parse_envelope
-from ahp.recorder import DEFAULT_MAX_SEGMENT_BYTES
 from ahp.core.signing import HAS_CRYPTO
 from ahp.core.types import RecordType
 from ahp.core.verify import verify_chain
-from ahp.recorder import AHPRecorder
+from ahp.recorder import DEFAULT_MAX_SEGMENT_BYTES, AHPRecorder
 
 
 def _verify_internal_chain(path: str) -> tuple:
@@ -45,6 +45,7 @@ def _verify_internal_chain(path: str) -> tuple:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_recorder(tmpdir: str, name: str = "test.ahp", **kwargs) -> tuple:
     chain_path = os.path.join(tmpdir, name)
@@ -83,6 +84,7 @@ def _find_segments(tmpdir: str, base: str = "test.ahp") -> list:
 # ---------------------------------------------------------------------------
 # Basic rotation: file management
 # ---------------------------------------------------------------------------
+
 
 class TestRotationBasic(unittest.TestCase):
     """Rotation creates a .segment file and continues at the original path."""
@@ -140,6 +142,7 @@ class TestRotationBasic(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Hash-chain continuity across the rotation boundary
 # ---------------------------------------------------------------------------
+
 
 class TestRotationChainContinuity(unittest.TestCase):
     """The hash chain must be unbroken at a rotation boundary."""
@@ -234,6 +237,7 @@ class TestRotationChainContinuity(unittest.TestCase):
 # Genesis records in the new segment
 # ---------------------------------------------------------------------------
 
+
 class TestRotationGenesisRecords(unittest.TestCase):
     """New segment re-emits genesis records (BOOT and optionally KEY_GENESIS)."""
 
@@ -285,6 +289,7 @@ class TestRotationGenesisRecords(unittest.TestCase):
 # Multiple rotations
 # ---------------------------------------------------------------------------
 
+
 class TestRotationMultiple(unittest.TestCase):
     """Multiple consecutive rotations produce multiple segment files."""
 
@@ -309,7 +314,8 @@ class TestRotationMultiple(unittest.TestCase):
 
         segments = _find_segments(self.tmpdir)
         self.assertEqual(
-            len(segments), 2,
+            len(segments),
+            2,
             f"Expected 2 segments, got {[s.name for s in segments]}",
         )
 
@@ -381,6 +387,7 @@ class TestRotationMultiple(unittest.TestCase):
 # Fail-open: recorder remains functional through rotation
 # ---------------------------------------------------------------------------
 
+
 class TestRotationFailOpen(unittest.TestCase):
     """Recorder continues accepting records after rotation (fail-open design)."""
 
@@ -428,6 +435,7 @@ class TestRotationFailOpen(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Size tracking accuracy
 # ---------------------------------------------------------------------------
+
 
 class TestRotationSizeTracking(unittest.TestCase):
     """bytes_written accurately reflects chain growth for rotation decisions."""

@@ -488,8 +488,8 @@ class AHPRecorder(RecorderBase):
             chain_size,
         )
 
-        prev_hash = self._chain._prev_hash
-        prev_sequence = self._chain._sequence
+        prev_hash = self._chain.prev_hash
+        prev_sequence = self._chain.sequence
 
         self._chain.close()
 

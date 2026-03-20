@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass
 from typing import List
+
+logger = logging.getLogger("ahp.signing")
 
 try:
     from cryptography.hazmat.primitives import serialization
@@ -63,7 +66,8 @@ def verify_signature(message: bytes, signature: bytes, public_key_bytes: bytes) 
         public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
         public_key.verify(signature, message)
         return True
-    except Exception:
+    except Exception as exc:
+        logger.debug("verify_signature failed: %s: %s", type(exc).__name__, exc)
         return False
 
 

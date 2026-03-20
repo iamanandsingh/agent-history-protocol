@@ -1,10 +1,11 @@
 """Tests for witness auto-flow through AHPRecorder."""
+
 from __future__ import annotations
 
-import tempfile
 import os
-import time
+import tempfile
 import threading
+import time
 import unittest
 from http.server import HTTPServer
 from pathlib import Path
@@ -19,7 +20,7 @@ class TestWitnessAutoFlow(unittest.TestCase):
         """Recorder with level=3 auto-sends checkpoints to the witness."""
         from witness.server import WitnessHandler, _load_receipts
 
-        server = HTTPServer(('localhost', 0), WitnessHandler)
+        server = HTTPServer(("localhost", 0), WitnessHandler)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -35,6 +36,7 @@ class TestWitnessAutoFlow(unittest.TestCase):
             chain_path = os.path.join(tmpdir, "witness_flow.ahp")
 
             from ahp.recorder import AHPRecorder
+
             recorder = AHPRecorder(
                 agent_name="witness-test",
                 chain_path=chain_path,
@@ -53,10 +55,11 @@ class TestWitnessAutoFlow(unittest.TestCase):
 
             time.sleep(0.5)
             receipts = _load_receipts()
-            witness_count = len(receipts.get('receipts', []))
+            witness_count = len(receipts.get("receipts", []))
 
             self.assertGreater(
-                witness_count, 0,
+                witness_count,
+                0,
                 "Witness should have received at least one checkpoint",
             )
 
@@ -71,5 +74,5 @@ class TestWitnessAutoFlow(unittest.TestCase):
                 pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

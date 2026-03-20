@@ -1,11 +1,12 @@
 """Tests for LangChain integration (AHPCallbackHandler)."""
+
 from __future__ import annotations
 
 import os
 import tempfile
 import unittest
 
-from ahp.core.chain import ChainWriter, ChainReader
+from ahp.core.chain import ChainReader, ChainWriter
 from ahp.core.verify import verify_chain
 
 
@@ -14,6 +15,7 @@ class TestLangChainInterface(unittest.TestCase):
 
     def test_callback_handler_exists(self):
         from ahp.integrations.langchain import AHPCallbackHandler
+
         self.assertTrue(callable(AHPCallbackHandler))
 
     def test_callback_handler_methods(self):
@@ -24,9 +26,16 @@ class TestLangChainInterface(unittest.TestCase):
         writer = ChainWriter(os.path.join(tmpdir, "lc.ahp"))
         handler = AHPCallbackHandler(writer)
 
-        for method in ('on_tool_start', 'on_tool_end', 'on_tool_error',
-                       'on_llm_start', 'on_llm_end', 'on_llm_error',
-                       'on_chain_start', 'on_chain_end'):
+        for method in (
+            "on_tool_start",
+            "on_tool_end",
+            "on_tool_error",
+            "on_llm_start",
+            "on_llm_end",
+            "on_llm_error",
+            "on_chain_start",
+            "on_chain_end",
+        ):
             self.assertTrue(hasattr(handler, method), f"Missing method: {method}")
         writer.close()
 
@@ -66,7 +75,7 @@ class TestLangChainInterface(unittest.TestCase):
 
         handler.on_tool_start(
             serialized={"name": "bad_tool"},
-            input_str='{}',
+            input_str="{}",
             run_id="run-002",
             name="bad_tool",
         )
@@ -118,6 +127,7 @@ class TestLangChainInterface(unittest.TestCase):
 
         class MockResponse:
             llm_output = {"model_name": "gpt-4", "token_usage": {"prompt_tokens": 10, "completion_tokens": 25}}
+
             def __str__(self):
                 return "Customer John is active."
 
@@ -180,10 +190,12 @@ class TestExternalPackages(unittest.TestCase):
         """Simulate LangChain callbacks even when langchain-core is not installed."""
         try:
             import langchain_core  # noqa: F401
+
             print("\n  langchain-core IS installed — real integration available")
         except ImportError:
             print("\n  langchain-core not installed — testing simulated callbacks")
             from ahp.integrations.langchain import AHPCallbackHandler
+
             tmpdir = tempfile.mkdtemp()
             writer = ChainWriter(os.path.join(tmpdir, "lc.ahp"))
             handler = AHPCallbackHandler(writer)
@@ -195,11 +207,12 @@ class TestExternalPackages(unittest.TestCase):
     def test_mcp_import(self):
         """Report whether the mcp package is available."""
         from ahp.interceptors.mcp_auto import HAS_MCP
+
         if not HAS_MCP:
             print("\n  mcp package not installed — using built-in JSON-RPC fallback")
         else:
             print("\n  mcp package IS installed — real wrapping available")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

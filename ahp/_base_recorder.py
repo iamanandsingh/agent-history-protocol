@@ -8,6 +8,7 @@ signing), key genesis payload construction, and config resolution.
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import logging
 import platform
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -38,7 +39,10 @@ logger = logging.getLogger("ahp.recorder")
 
 # SDK identity constants
 SDK_NAME = "ahp-python"
-SDK_VERSION = "0.1.0a1"
+try:
+    SDK_VERSION = importlib.metadata.version("ahp")
+except importlib.metadata.PackageNotFoundError:
+    SDK_VERSION = "0.1.0a1"
 
 # Map string fsync modes from config to enum values
 FSYNC_MAP = {

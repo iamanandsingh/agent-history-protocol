@@ -16,7 +16,9 @@ Usage:
 from __future__ import annotations
 
 import io
+import logging
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -24,9 +26,15 @@ from typing import Any, Optional
 
 from ahp.interceptors.http_helper import create_action_from_http
 
+logger = logging.getLogger("ahp.interceptors.http_auto")
+
 # Module-level state for the monkey-patch.
 _original_urlopen = None  # type: Optional[Any]
 _recorder = None  # type: Optional[Any]
+
+# Per-thread reentrancy guard: prevents the witness client's own urllib calls
+# (made during AHP recording) from being intercepted and recorded again.
+_local = threading.local()
 
 # The sentinel that urllib.request.urlopen uses for the default timeout.
 _GLOBAL_DEFAULT_TIMEOUT = socket._GLOBAL_DEFAULT_TIMEOUT  # type: ignore[attr-defined]
@@ -128,6 +136,23 @@ def install_http_interceptor(recorder: Any) -> None:
         context: Any = None,
     ) -> Any:
         """Drop-in replacement for urllib.request.urlopen that records calls."""
+        # ---- reentrancy guard -------------------------------------------
+        # If we're already inside the interceptor (e.g. the witness client
+        # making its own HTTP call during AHP recording), pass through
+        # directly to avoid infinite recursion and double-recording.
+        if getattr(_local, "in_interceptor", False):
+            assert _original_urlopen is not None
+            kw: dict[str, Any] = {}
+            if timeout is not _GLOBAL_DEFAULT_TIMEOUT:
+                kw["timeout"] = timeout
+            if cafile is not None:
+                kw["cafile"] = cafile
+            if capath is not None:
+                kw["capath"] = capath
+            if context is not None:
+                kw["context"] = context
+            return _original_urlopen(url, data=data, **kw)
+
         # ---- extract request metadata -----------------------------------
         if isinstance(url, urllib.request.Request):
             url_str = url.full_url
@@ -160,7 +185,8 @@ def install_http_interceptor(recorder: Any) -> None:
         wrapped = None  # type: Optional[_ReadableResponse]
 
         try:
-            assert _original_urlopen is not None
+            if _original_urlopen is None:
+                raise RuntimeError("HTTP interceptor is not installed; call install_http_interceptor() first")
             response = _original_urlopen(url, data=data, **kwargs)
 
             # Read the full body so we can hash it for AHP, then wrap the
@@ -190,6 +216,7 @@ def install_http_interceptor(recorder: Any) -> None:
         duration_ms = int((time.time() - start) * 1000)
 
         # ---- record in AHP (fail-open: never crash the agent) ----------
+        _local.in_interceptor = True
         try:
             action = create_action_from_http(
                 method=method,
@@ -199,7 +226,8 @@ def install_http_interceptor(recorder: Any) -> None:
                 status_code=status_code,
                 duration_ms=duration_ms,
             )
-            assert _recorder is not None
+            if _recorder is None:
+                raise RuntimeError("No recorder attached; call install_http_interceptor(recorder) first")
             _recorder.safe_record(
                 tool_name=action.tool_name,
                 parameters=request_body if isinstance(request_body, bytes) else b"",
@@ -213,6 +241,8 @@ def install_http_interceptor(recorder: Any) -> None:
             )
         except Exception:
             pass  # Fail-open: never crash the agent
+        finally:
+            _local.in_interceptor = False
 
         # ---- propagate to caller ----------------------------------------
         if error is not None:

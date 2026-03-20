@@ -1,24 +1,28 @@
 """Async tests — AsyncChainWriter + AsyncAHPRecorder."""
+
 from __future__ import annotations
 
 import asyncio
 import os
 import tempfile
 import unittest
-from typing import Optional
 
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType,
-)
-from ahp.core.records import (
-    ActionPayload, BootPayload, Authorization,
-)
-from ahp.core.async_chain import AsyncChainWriter
-from ahp.core.chain import ChainReader, parse_envelope, parse_action_payload
-from ahp.core.verify import verify_chain
-from ahp.core.json_format import record_to_json
 from ahp.async_recorder import AsyncAHPRecorder
+from ahp.core.async_chain import AsyncChainWriter
+from ahp.core.chain import ChainReader, parse_envelope
+from ahp.core.json_format import record_to_json
+from ahp.core.records import (
+    ActionPayload,
+    Authorization,
+)
+from ahp.core.types import (
+    ActionType,
+    AuthorizationType,
+    Protocol,
+    RecordType,
+    ResultStatus,
+)
+from ahp.core.verify import verify_chain
 
 
 def run_async(coro):
@@ -37,13 +41,15 @@ class TestAsyncChainWriter(unittest.TestCase):
             await writer.start()
 
             for i in range(5):
-                await writer.write_record(ActionPayload(
-                    tool_name=f"tool_{i}",
-                    result_status=ResultStatus.SUCCESS,
-                    protocol=Protocol.MCP,
-                    action_type=ActionType.TOOL_CALL,
-                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-                ))
+                await writer.write_record(
+                    ActionPayload(
+                        tool_name=f"tool_{i}",
+                        result_status=ResultStatus.SUCCESS,
+                        protocol=Protocol.MCP,
+                        action_type=ActionType.TOOL_CALL,
+                        authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                    )
+                )
 
             await writer.stop()
 
@@ -61,13 +67,15 @@ class TestAsyncChainWriter(unittest.TestCase):
 
             async def write_batch(start: int, count: int):
                 for i in range(count):
-                    await writer.write_record(ActionPayload(
-                        tool_name=f"tool_{start}_{i}",
-                        result_status=ResultStatus.SUCCESS,
-                        protocol=Protocol.MCP,
-                        action_type=ActionType.TOOL_CALL,
-                        authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-                    ))
+                    await writer.write_record(
+                        ActionPayload(
+                            tool_name=f"tool_{start}_{i}",
+                            result_status=ResultStatus.SUCCESS,
+                            protocol=Protocol.MCP,
+                            action_type=ActionType.TOOL_CALL,
+                            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                        )
+                    )
 
             # 5 concurrent tasks writing 10 records each
             tasks = [write_batch(i * 10, 10) for i in range(5)]
@@ -91,13 +99,15 @@ class TestAsyncChainWriter(unittest.TestCase):
 
             records = []
             for i in range(10):
-                r = await writer.write_record(ActionPayload(
-                    tool_name=f"tool_{i}",
-                    result_status=ResultStatus.SUCCESS,
-                    protocol=Protocol.MCP,
-                    action_type=ActionType.TOOL_CALL,
-                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-                ))
+                r = await writer.write_record(
+                    ActionPayload(
+                        tool_name=f"tool_{i}",
+                        result_status=ResultStatus.SUCCESS,
+                        protocol=Protocol.MCP,
+                        action_type=ActionType.TOOL_CALL,
+                        authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                    )
+                )
                 records.append(r)
 
             await writer.stop()
@@ -132,7 +142,7 @@ class TestAsyncRecorder(unittest.TestCase):
             await recorder.record_action(
                 tool_name="read_file",
                 parameters=b'{"path": "/tmp/test"}',
-                result=b'file contents',
+                result=b"file contents",
             )
 
             await recorder.stop()
@@ -171,9 +181,9 @@ class TestAsyncRecorder(unittest.TestCase):
             self.assertEqual(len(records), 2)
 
             j = record_to_json(records[1])
-            self.assertEqual(j['payload']['action_type'], 'INFERENCE')
-            self.assertEqual(j['payload']['model_id'], 'claude-sonnet-4-6')
-            self.assertEqual(j['payload']['input_token_count'], 100)
+            self.assertEqual(j["payload"]["action_type"], "INFERENCE")
+            self.assertEqual(j["payload"]["model_id"], "claude-sonnet-4-6")
+            self.assertEqual(j["payload"]["input_token_count"], 100)
 
         run_async(_test())
 
@@ -187,7 +197,7 @@ class TestAsyncRecorder(unittest.TestCase):
             await recorder.start()
 
             # Normal record
-            await recorder.record_action(tool_name="good_call", parameters=b'ok', result=b'ok')
+            await recorder.record_action(tool_name="good_call", parameters=b"ok", result=b"ok")
 
             # Force a failure by passing bad data to safe_record
             original_write = recorder.writer.write_record
@@ -202,7 +212,7 @@ class TestAsyncRecorder(unittest.TestCase):
             # Restore and record again
             recorder.writer.write_record = original_write
             recorder._pending_gap = False  # Skip gap emission for simplicity
-            await recorder.record_action(tool_name="after_fail", parameters=b'ok', result=b'ok')
+            await recorder.record_action(tool_name="after_fail", parameters=b"ok", result=b"ok")
 
             await recorder.stop()
 
@@ -226,8 +236,8 @@ class TestAsyncRecorder(unittest.TestCase):
             for i in range(7):
                 await recorder.record_action(
                     tool_name=f"tool_{i}",
-                    parameters=b'params',
-                    result=b'result',
+                    parameters=b"params",
+                    result=b"result",
                 )
 
             await recorder.stop()
@@ -235,10 +245,7 @@ class TestAsyncRecorder(unittest.TestCase):
             # Should have: Boot + 5 actions + checkpoint + 2 actions = 9
             reader = ChainReader(self.chain_path)
             records = reader.read_all()
-            has_checkpoint = any(
-                parse_envelope(s)['record_type'] == RecordType.CHECKPOINT
-                for s in records
-            )
+            has_checkpoint = any(parse_envelope(s)["record_type"] == RecordType.CHECKPOINT for s in records)
             self.assertTrue(has_checkpoint)
 
         run_async(_test())
@@ -256,7 +263,8 @@ class TestAsyncRecorder(unittest.TestCase):
             for i in range(4):
                 await recorder.record_action(
                     tool_name=f"tool_{i}",
-                    parameters=b'p', result=b'r',
+                    parameters=b"p",
+                    result=b"r",
                 )
 
             await recorder.stop()
@@ -264,14 +272,11 @@ class TestAsyncRecorder(unittest.TestCase):
             # Should have KeyGenesisRecord
             reader = ChainReader(self.chain_path)
             records = reader.read_all()
-            has_key = any(
-                parse_envelope(s)['record_type'] == RecordType.KEY
-                for s in records
-            )
+            has_key = any(parse_envelope(s)["record_type"] == RecordType.KEY for s in records)
             self.assertTrue(has_key)
 
         run_async(_test())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

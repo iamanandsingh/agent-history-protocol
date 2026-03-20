@@ -2,28 +2,32 @@
 
 Every test makes REAL network calls and verifies AHP records them correctly.
 """
+
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, AuthorizerType, AuthorizationDecision,
-)
-from ahp.core.records import (
-    ActionPayload, BootPayload, Authorization, AuthorizationEntry,
-)
-from ahp.core.chain import ChainWriter, ChainReader, parse_envelope, parse_action_payload
-from ahp.core.verify import verify_chain
-from ahp.core.uuid7 import uuid7, uuid7_to_str
+from ahp.core.chain import ChainReader, ChainWriter, parse_action_payload, parse_envelope
 from ahp.core.json_format import record_to_json
+from ahp.core.records import (
+    Authorization,
+    AuthorizationEntry,
+    BootPayload,
+)
+from ahp.core.types import (
+    ActionType,
+    AuthorizationDecision,
+    AuthorizationType,
+    AuthorizerType,
+    Protocol,
+    ResultStatus,
+)
+from ahp.core.verify import verify_chain
 
 
 class TestRealMCPProtocol(unittest.TestCase):
@@ -40,10 +44,11 @@ class TestRealMCPProtocol(unittest.TestCase):
 
         # Import and start MCP server
         from ahp.protocols.mcp_server import MCPToolServer
+
         self.mcp_server = MCPToolServer(port=0)
 
         # Register real tools
-        data_dir = self.data_dir
+
         def read_file(path: str) -> str:
             return Path(path).read_text()
 
@@ -83,11 +88,11 @@ class TestRealMCPProtocol(unittest.TestCase):
         self.assertEqual(len(records), 1)
 
         env = parse_envelope(records[0])
-        payload = parse_action_payload(env['payload_bytes'])
-        self.assertEqual(payload['tool_name'], 'read_file')
-        self.assertEqual(Protocol(payload['protocol']), Protocol.MCP)  # REAL MCP
-        self.assertEqual(ResultStatus(payload['result_status']), ResultStatus.SUCCESS)
-        self.assertGreaterEqual(payload['response_time_ms'], 0)  # localhost can be sub-ms
+        payload = parse_action_payload(env["payload_bytes"])
+        self.assertEqual(payload["tool_name"], "read_file")
+        self.assertEqual(Protocol(payload["protocol"]), Protocol.MCP)  # REAL MCP
+        self.assertEqual(ResultStatus(payload["result_status"]), ResultStatus.SUCCESS)
+        self.assertGreaterEqual(payload["response_time_ms"], 0)  # localhost can be sub-ms
 
         # Chain valid
         result_v = verify_chain(self.chain_path)
@@ -107,11 +112,11 @@ class TestRealMCPProtocol(unittest.TestCase):
         reader = ChainReader(self.chain_path)
         records = reader.read_all()
         env = parse_envelope(records[0])
-        payload = parse_action_payload(env['payload_bytes'])
-        self.assertEqual(Protocol(payload['protocol']), Protocol.MCP)
+        payload = parse_action_payload(env["payload_bytes"])
+        self.assertEqual(Protocol(payload["protocol"]), Protocol.MCP)
         # JSON-RPC error returns 200 with error body — SDK records as SUCCESS at HTTP level
         # but the tool_name shows the failed tool
-        self.assertEqual(payload['tool_name'], 'nonexistent_tool')
+        self.assertEqual(payload["tool_name"], "nonexistent_tool")
 
     def test_mcp_write_tool(self):
         """MCP write tool — verify real file written and recorded."""
@@ -121,7 +126,7 @@ class TestRealMCPProtocol(unittest.TestCase):
         client = MCPClient(self.server_url, writer)
 
         output_path = os.path.join(self.data_dir, "mcp_output.txt")
-        result = client.call_tool("write_file", {"path": output_path, "content": "Written via MCP"})
+        client.call_tool("write_file", {"path": output_path, "content": "Written via MCP"})
 
         # File was REALLY written
         self.assertTrue(Path(output_path).exists())
@@ -131,9 +136,9 @@ class TestRealMCPProtocol(unittest.TestCase):
         reader = ChainReader(self.chain_path)
         records = reader.read_all()
         env = parse_envelope(records[0])
-        payload = parse_action_payload(env['payload_bytes'])
-        self.assertEqual(Protocol(payload['protocol']), Protocol.MCP)
-        self.assertEqual(payload['tool_name'], 'write_file')
+        payload = parse_action_payload(env["payload_bytes"])
+        self.assertEqual(Protocol(payload["protocol"]), Protocol.MCP)
+        self.assertEqual(payload["tool_name"], "write_file")
 
     def test_mcp_multiple_calls_chained(self):
         """Multiple MCP calls — verify hash chain integrity."""
@@ -159,20 +164,22 @@ class TestRealMCPProtocol(unittest.TestCase):
 
         auth = Authorization(
             type=AuthorizationType.AUTH_HUMAN,
-            entries=[AuthorizationEntry(
-                authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
-                authorizer_id="user:operator",
-                decision=AuthorizationDecision.APPROVED,
-                timestamp_ms=int(time.time() * 1000),
-            )],
+            entries=[
+                AuthorizationEntry(
+                    authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
+                    authorizer_id="user:operator",
+                    decision=AuthorizationDecision.APPROVED,
+                    timestamp_ms=int(time.time() * 1000),
+                )
+            ],
         )
 
         result = client.call_tool("search", {"query": "authorized search"}, authorization=auth)
         self.assertIn("results", result)
 
         j = record_to_json(ChainReader(self.chain_path).read_all()[0])
-        self.assertEqual(j['payload']['authorization']['type'], 'AUTH_HUMAN')
-        self.assertEqual(j['payload']['authorization']['entries'][0]['decision'], 'APPROVED')
+        self.assertEqual(j["payload"]["authorization"]["type"], "AUTH_HUMAN")
+        self.assertEqual(j["payload"]["authorization"]["entries"][0]["decision"], "APPROVED")
 
 
 class TestRealA2AProtocol(unittest.TestCase):
@@ -185,9 +192,8 @@ class TestRealA2AProtocol(unittest.TestCase):
 
     def test_real_a2a_task_delegation(self):
         """Agent A sends task to Agent B via A2A JSON-RPC. Both record in AHP."""
-        from ahp.protocols.a2a import A2AServer, A2AClient
-        import threading
-        from http.server import HTTPServer, BaseHTTPRequestHandler
+
+        from ahp.protocols.a2a import A2AClient, A2AServer
 
         # Start Agent B (supervisor) as A2A server
         writer_b = ChainWriter(self.server_chain)
@@ -216,7 +222,7 @@ class TestRealA2AProtocol(unittest.TestCase):
             self.assertIsNotNone(result, "A2A returned no result")
             # Result might have "result" nested (from task handler) or "approved" directly
             task_result = result.get("result", result)
-            approved = task_result.get("approved") if isinstance(task_result, dict) else None
+            task_result.get("approved") if isinstance(task_result, dict) else None
 
             # Verify Agent A's chain (client)
             reader_a = ChainReader(self.client_chain)
@@ -225,11 +231,11 @@ class TestRealA2AProtocol(unittest.TestCase):
             self.assertEqual(len(records_a), 2)
 
             env_a = parse_envelope(records_a[1])
-            payload_a = parse_action_payload(env_a['payload_bytes'])
-            self.assertEqual(payload_a['tool_name'], 'a2a.tasks.send')
-            self.assertEqual(Protocol(payload_a['protocol']), Protocol.A2A)
-            self.assertEqual(ActionType(payload_a['action_type']), ActionType.DELEGATION)
-            self.assertGreater(payload_a['response_time_ms'], 0)
+            payload_a = parse_action_payload(env_a["payload_bytes"])
+            self.assertEqual(payload_a["tool_name"], "a2a.tasks.send")
+            self.assertEqual(Protocol(payload_a["protocol"]), Protocol.A2A)
+            self.assertEqual(ActionType(payload_a["action_type"]), ActionType.DELEGATION)
+            self.assertGreater(payload_a["response_time_ms"], 0)
 
             # Verify Agent B's chain (server)
             reader_b = ChainReader(self.server_chain)
@@ -237,9 +243,9 @@ class TestRealA2AProtocol(unittest.TestCase):
             self.assertGreaterEqual(len(records_b), 3)
 
             # Check the authorization_decision record
-            last_b = parse_action_payload(parse_envelope(records_b[-1])['payload_bytes'])
-            self.assertEqual(last_b['tool_name'], 'a2a.authorization_decision')
-            self.assertEqual(Protocol(last_b['protocol']), Protocol.A2A)
+            last_b = parse_action_payload(parse_envelope(records_b[-1])["payload_bytes"])
+            self.assertEqual(last_b["tool_name"], "a2a.authorization_decision")
+            self.assertEqual(Protocol(last_b["protocol"]), Protocol.A2A)
 
             # Both chains valid
             self.assertTrue(verify_chain(self.client_chain).valid)
@@ -250,7 +256,7 @@ class TestRealA2AProtocol(unittest.TestCase):
 
     def test_a2a_identity_check(self):
         """Verify A2A agent identity endpoint works."""
-        from ahp.protocols.a2a import A2AServer, A2AClient
+        from ahp.protocols.a2a import A2AClient, A2AServer
 
         writer = ChainWriter(self.server_chain)
         server = A2AServer("test-agent", writer, port=0)
@@ -260,8 +266,8 @@ class TestRealA2AProtocol(unittest.TestCase):
             client = A2AClient(url, ChainWriter(self.client_chain))
             identity = client.get_identity()
             self.assertIsNotNone(identity)
-            self.assertEqual(identity['agent_name'], 'test-agent')
-            self.assertIn('agent_id', identity)
+            self.assertEqual(identity["agent_name"], "test-agent")
+            self.assertIn("agent_id", identity)
         finally:
             server.stop()
 
@@ -287,8 +293,8 @@ class TestGRPCInterceptor(unittest.TestCase):
         self.assertEqual(action.action_type, ActionType.TOOL_CALL)
         self.assertEqual(action.result_status, ResultStatus.SUCCESS)
         self.assertEqual(action.response_time_ms, 150)
-        self.assertNotEqual(action.parameters_hash, b'\x00' * 16)
-        self.assertNotEqual(action.result_hash, b'\x00' * 16)
+        self.assertNotEqual(action.parameters_hash, b"\x00" * 16)
+        self.assertNotEqual(action.result_hash, b"\x00" * 16)
 
     def test_grpc_action_in_chain(self):
         """Verify gRPC action records correctly in AHP chain."""
@@ -314,8 +320,8 @@ class TestGRPCInterceptor(unittest.TestCase):
         # Verify protocol field
         reader = ChainReader(chain_path)
         j = record_to_json(reader.read_all()[0])
-        self.assertEqual(j['payload']['protocol'], 'GRPC')
-        self.assertEqual(j['payload']['tool_name'], 'user.UserService/GetUser')
+        self.assertEqual(j["payload"]["protocol"], "GRPC")
+        self.assertEqual(j["payload"]["tool_name"], "user.UserService/GetUser")
 
     def test_grpc_error(self):
         """Test gRPC error action."""
@@ -325,7 +331,7 @@ class TestGRPCInterceptor(unittest.TestCase):
             service_name="payment.PaymentService",
             method_name="Refund",
             request_bytes=b'{"tx_id": "TX-999"}',
-            response_bytes=b'UNAVAILABLE: service down',
+            response_bytes=b"UNAVAILABLE: service down",
             duration_ms=5000,
             success=False,
         )
@@ -339,21 +345,23 @@ class TestAllProtocolsEndToEnd(unittest.TestCase):
 
     def test_mixed_protocol_chain(self):
         """One agent uses HTTPS + MCP + A2A + gRPC — all in one chain."""
-        from ahp.protocols.mcp_server import MCPToolServer
-        from ahp.protocols.mcp_client import MCPClient
-        from ahp.protocols.a2a import A2AServer, A2AClient
-        from ahp.interceptors.http_helper import create_action_from_http
         from ahp.interceptors.grpc import create_action_from_grpc
+        from ahp.interceptors.http_helper import create_action_from_http
+        from ahp.protocols.a2a import A2AClient, A2AServer
+        from ahp.protocols.mcp_client import MCPClient
+        from ahp.protocols.mcp_server import MCPToolServer
 
         tmpdir = tempfile.mkdtemp()
         chain_path = os.path.join(tmpdir, "all_protocols.ahp")
         supervisor_chain = os.path.join(tmpdir, "supervisor.ahp")
 
         writer = ChainWriter(chain_path)
-        writer.write_record(BootPayload(
-            agent_name="multi-protocol-agent",
-            interceptors=["http", "mcp", "a2a", "grpc"],
-        ))
+        writer.write_record(
+            BootPayload(
+                agent_name="multi-protocol-agent",
+                interceptors=["http", "mcp", "a2a", "grpc"],
+            )
+        )
 
         # 1. HTTP call (simulated LLM)
         http_action = create_action_from_http(
@@ -386,8 +394,9 @@ class TestAllProtocolsEndToEnd(unittest.TestCase):
         sup_writer = ChainWriter(supervisor_chain)
         sup_writer.write_record(BootPayload(agent_name="supervisor"))
 
-        a2a_server = A2AServer("supervisor", sup_writer, port=0,
-                               task_handler=lambda t: {"approved": True, "reason": "OK"})
+        a2a_server = A2AServer(
+            "supervisor", sup_writer, port=0, task_handler=lambda t: {"approved": True, "reason": "OK"}
+        )
         a2a_url = a2a_server.start()
 
         try:
@@ -397,7 +406,7 @@ class TestAllProtocolsEndToEnd(unittest.TestCase):
             task_result = a2a_result.get("result", a2a_result) if isinstance(a2a_result, dict) else {}
             self.assertTrue(
                 a2a_result.get("approved") or (isinstance(task_result, dict) and task_result.get("approved")),
-                f"A2A approval failed: {a2a_result}"
+                f"A2A approval failed: {a2a_result}",
             )
         finally:
             a2a_server.stop()
@@ -420,26 +429,26 @@ class TestAllProtocolsEndToEnd(unittest.TestCase):
         protocols_found = set()
         for stored in records[1:]:  # Skip boot
             env = parse_envelope(stored)
-            payload = parse_action_payload(env['payload_bytes'])
-            protocols_found.add(Protocol(payload['protocol']).name)
+            payload = parse_action_payload(env["payload_bytes"])
+            protocols_found.add(Protocol(payload["protocol"]).name)
 
-        self.assertIn('HTTP', protocols_found)
-        self.assertIn('MCP', protocols_found)
-        self.assertIn('A2A', protocols_found)
-        self.assertIn('GRPC', protocols_found)
+        self.assertIn("HTTP", protocols_found)
+        self.assertIn("MCP", protocols_found)
+        self.assertIn("A2A", protocols_found)
+        self.assertIn("GRPC", protocols_found)
 
         # Chain integrity
         result = verify_chain(chain_path)
         self.assertTrue(result.valid, f"Chain invalid: {result.error}")
         self.assertEqual(result.records_checked, 5)
 
-        print(f"\n✅ All 4 protocols in one chain:")
-        print(f"   HTTP:  INFERENCE (simulated Anthropic API)")
-        print(f"   MCP:   TOOL_CALL (real JSON-RPC, real file read)")
-        print(f"   A2A:   DELEGATION (real JSON-RPC, real task approval)")
-        print(f"   gRPC:  TOOL_CALL (simulated — no grpcio installed)")
+        print("\n✅ All 4 protocols in one chain:")
+        print("   HTTP:  INFERENCE (simulated Anthropic API)")
+        print("   MCP:   TOOL_CALL (real JSON-RPC, real file read)")
+        print("   A2A:   DELEGATION (real JSON-RPC, real task approval)")
+        print("   gRPC:  TOOL_CALL (simulated — no grpcio installed)")
         print(f"   Chain: {result.records_checked} records, VALID")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

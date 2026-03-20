@@ -1,14 +1,14 @@
 """Real tools for the showcase demo — actual file I/O, search, data operations."""
+
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Optional, Any, Dict, List
-from ahp.core.types import ResultStatus, Protocol, ActionType, AuthorizationType, AuthorizationDecision, AuthorizerType
-from ahp.core.records import ActionPayload, Authorization, AuthorizationEntry
+from typing import Any, Dict, Optional
+
 from ahp.core.chain import ChainWriter
+from ahp.core.records import Authorization
 from ahp.core.uuid7 import uuid7
 from ahp.interceptors.mcp_helper import create_action_from_mcp
 
@@ -16,8 +16,9 @@ from ahp.interceptors.mcp_helper import create_action_from_mcp
 class ToolExecutor:
     """Executes real tools and records them in AHP."""
 
-    def __init__(self, writer: ChainWriter, session_id: Optional[bytes] = None,
-                 parent_record_id: Optional[bytes] = None):
+    def __init__(
+        self, writer: ChainWriter, session_id: Optional[bytes] = None, parent_record_id: Optional[bytes] = None
+    ):
         self.writer = writer
         self.session_id = session_id or uuid7()
         self.parent_record_id = parent_record_id
@@ -25,8 +26,7 @@ class ToolExecutor:
     def set_parent(self, record_id: bytes) -> None:
         self.parent_record_id = record_id
 
-    def run(self, tool_name: str, params: dict,
-            authorization: Optional[Authorization] = None) -> Any:
+    def run(self, tool_name: str, params: dict, authorization: Optional[Authorization] = None) -> Any:
         """Execute a tool and record it in AHP. Returns the tool result."""
         func = TOOL_REGISTRY.get(tool_name)
         if not func:
@@ -58,8 +58,9 @@ class ToolExecutor:
         self.writer.write_record(action, session_id=self.session_id)
         return result
 
-    def _record_error(self, tool_name: str, params: dict, error: str,
-                      authorization: Optional[Authorization] = None) -> dict:
+    def _record_error(
+        self, tool_name: str, params: dict, error: str, authorization: Optional[Authorization] = None
+    ) -> dict:
         action = create_action_from_mcp(
             tool_name=tool_name,
             parameters=params,
@@ -78,6 +79,7 @@ class ToolExecutor:
 # ================================================================
 # Real Tool Implementations
 # ================================================================
+
 
 def search_orders(customer_id: int, data_dir: str = "demo/showcase/sandbox_data") -> Dict:
     """Search customer orders in the sandbox database."""
@@ -114,8 +116,7 @@ def get_customer(customer_id: int, data_dir: str = "demo/showcase/sandbox_data")
     return {"error": f"Customer {customer_id} not found"}
 
 
-def process_refund(order_id: int, amount: float,
-                   data_dir: str = "demo/showcase/sandbox_data") -> Dict:
+def process_refund(order_id: int, amount: float, data_dir: str = "demo/showcase/sandbox_data") -> Dict:
     """Process a refund — writes to the refund log."""
     refund_log = Path(data_dir) / "refund_log.json"
     refunds = json.loads(refund_log.read_text()) if refund_log.exists() else []
@@ -131,8 +132,7 @@ def process_refund(order_id: int, amount: float,
     return refund
 
 
-def delete_account(user_id: int,
-                   data_dir: str = "demo/showcase/sandbox_data") -> Dict:
+def delete_account(user_id: int, data_dir: str = "demo/showcase/sandbox_data") -> Dict:
     """Delete a user account — writes deletion record."""
     deletion_log = Path(data_dir) / "deletion_log.json"
     deletions = json.loads(deletion_log.read_text()) if deletion_log.exists() else []
@@ -147,8 +147,7 @@ def delete_account(user_id: int,
     return record
 
 
-def send_reply(customer_id: int, message: str,
-               data_dir: str = "demo/showcase/sandbox_data") -> Dict:
+def send_reply(customer_id: int, message: str, data_dir: str = "demo/showcase/sandbox_data") -> Dict:
     """Send a reply to a customer — writes to message log."""
     msg_log = Path(data_dir) / "messages.json"
     messages = json.loads(msg_log.read_text()) if msg_log.exists() else []

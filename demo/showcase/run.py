@@ -9,9 +9,9 @@ Usage:
     export GEMINI_API_KEY="your-key-here"
     python3 demo/showcase/run.py
 """
+
 from __future__ import annotations
 
-import json
 import os
 import struct
 import sys
@@ -21,40 +21,43 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from demo.showcase.config import (
-    GEMINI_API_KEY, GEMINI_MODEL, GEMINI_ENDPOINT,
-    SUPPORT_CHAIN, SUPERVISOR_CHAIN, SAFETY_CHAIN,
-)
-from demo.showcase.sandbox import create_sandbox, cleanup_chains
-from demo.showcase.agents.support import SupportAgent
-from demo.showcase.agents.supervisor import SupervisorAgent
-from ahp.core.chain import ChainReader, parse_envelope, parse_action_payload
+from ahp.core.chain import ChainReader, parse_action_payload, parse_envelope
+from ahp.core.json_format import format_action_summary
+from ahp.core.types import AuthorizationType, RecordType
 from ahp.core.verify import verify_chain
-from ahp.core.json_format import record_to_json, format_action_summary
-from ahp.core.types import RecordType, AuthorizationType
+from demo.showcase.agents.supervisor import SupervisorAgent
+from demo.showcase.agents.support import SupportAgent
+from demo.showcase.config import (
+    GEMINI_API_KEY,
+    GEMINI_ENDPOINT,
+    GEMINI_MODEL,
+    SUPERVISOR_CHAIN,
+    SUPPORT_CHAIN,
+)
+from demo.showcase.sandbox import cleanup_chains, create_sandbox
 
 
 def _get_last_action_auth(records: list) -> str:
     """Get the authorization type of the last ACTION record in the chain."""
     for stored in reversed(records):
         env = parse_envelope(stored)
-        if env['record_type'] == RecordType.ACTION:
-            payload = parse_action_payload(env['payload_bytes'])
-            auth_type = AuthorizationType(payload['authorization']['type'])
-            entries = payload['authorization']['entries']
+        if env["record_type"] == RecordType.ACTION:
+            payload = parse_action_payload(env["payload_bytes"])
+            auth_type = AuthorizationType(payload["authorization"]["type"])
+            entries = payload["authorization"]["entries"]
             if auth_type == AuthorizationType.AUTH_NONE:
                 return "AUTH_NONE (no approval needed)"
             elif auth_type == AuthorizationType.AUTH_AGENT:
-                name = entries[0]['authorizer_id'] if entries else '?'
+                name = entries[0]["authorizer_id"] if entries else "?"
                 return f"AUTH_AGENT ({name} approved)"
             elif auth_type == AuthorizationType.AUTH_HUMAN:
-                name = entries[0]['authorizer_id'] if entries else '?'
+                name = entries[0]["authorizer_id"] if entries else "?"
                 return f"AUTH_HUMAN ({name} approved)"
             elif auth_type == AuthorizationType.AUTH_MULTI_PARTY:
-                names = [e['authorizer_id'] for e in entries]
+                names = [e["authorizer_id"] for e in entries]
                 return f"AUTH_MULTI_PARTY ({' + '.join(names)})"
             elif auth_type == AuthorizationType.AUTH_POLICY:
-                name = entries[0]['authorizer_id'] if entries else '?'
+                name = entries[0]["authorizer_id"] if entries else "?"
                 return f"AUTH_POLICY ({name})"
             else:
                 return auth_type.name
@@ -66,23 +69,23 @@ def _get_auths_since(records: list, start_idx: int) -> str:
     auths = []
     for stored in records[start_idx:]:
         env = parse_envelope(stored)
-        if env['record_type'] != RecordType.ACTION:
+        if env["record_type"] != RecordType.ACTION:
             continue
-        payload = parse_action_payload(env['payload_bytes'])
-        auth_type = AuthorizationType(payload['authorization']['type'])
-        entries = payload['authorization']['entries']
+        payload = parse_action_payload(env["payload_bytes"])
+        auth_type = AuthorizationType(payload["authorization"]["type"])
+        entries = payload["authorization"]["entries"]
         if auth_type != AuthorizationType.AUTH_NONE:
             if auth_type == AuthorizationType.AUTH_AGENT:
-                name = entries[0]['authorizer_id'] if entries else '?'
+                name = entries[0]["authorizer_id"] if entries else "?"
                 auths.append(f"AUTH_AGENT ({name})")
             elif auth_type == AuthorizationType.AUTH_MULTI_PARTY:
-                names = [e['authorizer_id'] for e in entries]
+                names = [e["authorizer_id"] for e in entries]
                 auths.append(f"AUTH_MULTI_PARTY ({' + '.join(names)})")
             elif auth_type == AuthorizationType.AUTH_HUMAN:
-                name = entries[0]['authorizer_id'] if entries else '?'
+                name = entries[0]["authorizer_id"] if entries else "?"
                 auths.append(f"AUTH_HUMAN ({name})")
             elif auth_type == AuthorizationType.AUTH_POLICY:
-                name = entries[0]['authorizer_id'] if entries else '?'
+                name = entries[0]["authorizer_id"] if entries else "?"
                 auths.append(f"AUTH_POLICY ({name})")
     if not auths:
         return "AUTH_NONE (all actions auto-approved)"
@@ -116,12 +119,12 @@ def log_chain(chain_path: str, agent_name: str) -> None:
 
     for stored in records:
         s = format_action_summary(stored)
-        seq = s['sequence']
-        rtype = s['type']
-        tool = s['tool_name'][:25]
-        status = s['result_status']
-        auth = s['authorization'][:22]
-        ms = f"{s['response_time_ms']}ms" if s['response_time_ms'] else '—'
+        seq = s["sequence"]
+        rtype = s["type"]
+        tool = s["tool_name"][:25]
+        status = s["result_status"]
+        auth = s["authorization"][:22]
+        ms = f"{s['response_time_ms']}ms" if s["response_time_ms"] else "—"
         print(f"  {seq:>4} | {rtype:10} | {tool:25} | {status:7} | {auth:22} | {ms:>6}")
 
     print()
@@ -139,27 +142,27 @@ def verify_and_show(chain_path: str, agent_name: str) -> None:
 
 def tamper_chain(chain_path: str, target_record: int = 3) -> None:
     """Tamper with a record in the chain."""
-    with open(chain_path, 'rb') as f:
+    with open(chain_path, "rb") as f:
         data = bytearray(f.read())
 
     offset = 16  # Skip header
     for i in range(1, target_record):
-        length = struct.unpack('<I', data[offset:offset+4])[0]
+        length = struct.unpack("<I", data[offset : offset + 4])[0]
         offset += 4 + length + 4
 
-    length = struct.unpack('<I', data[offset:offset+4])[0]
+    length = struct.unpack("<I", data[offset : offset + 4])[0]
     record_start = offset + 4
 
     # Flip a byte in the record
     data[record_start + 80] ^= 0xFF
 
     # Fix CRC (attacker would do this)
-    length_bytes = data[offset:offset+4]
-    record_bytes = bytes(data[record_start:record_start + length])
+    length_bytes = data[offset : offset + 4]
+    record_bytes = bytes(data[record_start : record_start + length])
     new_crc = zlib.crc32(length_bytes + record_bytes) & 0xFFFFFFFF
-    struct.pack_into('<I', data, record_start + length, new_crc)
+    struct.pack_into("<I", data, record_start + length, new_crc)
 
-    with open(chain_path, 'wb') as f:
+    with open(chain_path, "wb") as f:
         f.write(data)
 
 
@@ -188,16 +191,22 @@ def main():
     # Start supervisor agent
     print("  [setup] Starting supervisor agent...")
     supervisor = SupervisorAgent(
-        api_key, GEMINI_MODEL, GEMINI_ENDPOINT,
-        SUPERVISOR_CHAIN, port=8200,
+        api_key,
+        GEMINI_MODEL,
+        GEMINI_ENDPOINT,
+        SUPERVISOR_CHAIN,
+        port=8200,
     )
     supervisor_url = supervisor.start()
     print(f"  [setup] Supervisor running at {supervisor_url}")
 
     # Create support agent
     support = SupportAgent(
-        api_key, GEMINI_MODEL, GEMINI_ENDPOINT,
-        SUPPORT_CHAIN, supervisor_url=supervisor_url,
+        api_key,
+        GEMINI_MODEL,
+        GEMINI_ENDPOINT,
+        SUPPORT_CHAIN,
+        supervisor_url=supervisor_url,
     )
     print("  [setup] Support agent ready")
     print()
@@ -211,8 +220,8 @@ def main():
     print()
     print("  support-bot calling Gemini Flash...")
     reply1 = support.handle(589, "What is your return policy?")
-    print(f"\n  support-bot → Customer #589:")
-    print(f"  \"{reply1[:200]}\"")
+    print("\n  support-bot → Customer #589:")
+    print(f'  "{reply1[:200]}"')
 
     # Check what actually happened in the chain
     r = ChainReader(SUPPORT_CHAIN)
@@ -229,9 +238,12 @@ def main():
     print()
     print("  support-bot calling Gemini Flash...")
     records_before = len(ChainReader(SUPPORT_CHAIN).read_all())
-    reply2 = support.handle(442, "I was charged twice for order #7891. The charge of $49.99 appeared two times on my statement. Please refund the duplicate charge.")
-    print(f"\n  support-bot → Customer #442:")
-    print(f"  \"{reply2[:200]}\"")
+    reply2 = support.handle(
+        442,
+        "I was charged twice for order #7891. The charge of $49.99 appeared two times on my statement. Please refund the duplicate charge.",
+    )
+    print("\n  support-bot → Customer #442:")
+    print(f'  "{reply2[:200]}"')
 
     # Check actual authorization from chain
     recs = ChainReader(SUPPORT_CHAIN).read_all()
@@ -248,8 +260,8 @@ def main():
     print("  support-bot calling Gemini Flash...")
     records_before = len(ChainReader(SUPPORT_CHAIN).read_all())
     reply3 = support.handle(103, "I want to delete my account and all my data immediately. This is a GDPR request.")
-    print(f"\n  support-bot → Customer #103:")
-    print(f"  \"{reply3[:200]}\"")
+    print("\n  support-bot → Customer #103:")
+    print(f'  "{reply3[:200]}"')
 
     recs = ChainReader(SUPPORT_CHAIN).read_all()
     new_auths = _get_auths_since(recs, records_before)
@@ -314,22 +326,26 @@ def main():
     for chain_records in [records, records_s]:
         for stored in chain_records:
             env = parse_envelope(stored)
-            if env['record_type'] == RecordType.ACTION:
-                payload = parse_action_payload(env['payload_bytes'])
-                if payload['action_type'] == 2:  # INFERENCE
+            if env["record_type"] == RecordType.ACTION:
+                payload = parse_action_payload(env["payload_bytes"])
+                if payload["action_type"] == 2:  # INFERENCE
                     inference_count += 1
                 else:
                     tool_count += 1
-                auth_type = payload['authorization']['type']
-                if auth_type == 1: auth_none += 1
-                elif auth_type == 2: auth_human += 1
-                elif auth_type == 3: auth_agent += 1
-                elif auth_type == 5: auth_multi += 1
+                auth_type = payload["authorization"]["type"]
+                if auth_type == 1:
+                    auth_none += 1
+                elif auth_type == 2:
+                    auth_human += 1
+                elif auth_type == 3:
+                    auth_agent += 1
+                elif auth_type == 5:
+                    auth_multi += 1
 
     print(f"  Total records:         {total_records} (across 2 agents)")
     print(f"  LLM inferences:        {inference_count} (real Gemini Flash calls)")
     print(f"  Tool executions:       {tool_count} (real file operations)")
-    print(f"  Authorization:")
+    print("  Authorization:")
     print(f"    No auth required:    {auth_none}")
     print(f"    Agent approved:      {auth_agent}")
     print(f"    Human approved:      {auth_human}")
@@ -358,5 +374,5 @@ def main():
     supervisor.stop()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

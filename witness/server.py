@@ -3,34 +3,45 @@
 Minimal implementation using stdlib only. No external dependencies.
 Storage: JSON file (for simplicity, not SQLite).
 """
+
 from __future__ import annotations
-import hashlib
+
 import json
 import logging
 import os
 import tempfile
 import threading
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Dict, Optional
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import TYPE_CHECKING, Dict, Optional
+
+if TYPE_CHECKING:
+    from ahp.core.signing import KeyPair
 
 logger = logging.getLogger(__name__)
 
 # Generate witness identity on startup
+witness_keys: Optional[KeyPair] = None
 try:
     from ahp.core.signing import generate_keypair, sign, verify_signature
+
     witness_keys = generate_keypair()
     _has_crypto = True
 except ImportError:
-    witness_keys = None
     _has_crypto = False
     logger.warning("Crypto not available — witness will not verify client signatures")
 
 WITNESS_ID = "ahp-reference-witness"
-RECEIPTS_FILE = "witness_receipts.json"
+RECEIPTS_FILE = os.environ.get(
+    "WITNESS_RECEIPTS_FILE",
+    str(Path(__file__).parent / "witness_receipts.json"),
+)
 MAX_REQUEST_SIZE = 1_048_576  # 1 MB
 MAX_RECEIPTS = 10_000  # rotate storage file after this many receipts
 _receipts_lock = threading.Lock()
+# In-memory index for O(1) duplicate receipt lookup; keyed by (agent_id, sequence).
+_receipt_index: Dict[tuple, Dict] = {}
 
 
 def _load_receipts() -> Dict:
@@ -43,9 +54,9 @@ def _load_receipts() -> Dict:
 def _save_receipts(data: Dict) -> None:
     """Atomic write: write to temp file then rename to prevent corruption."""
     dir_name = os.path.dirname(os.path.abspath(RECEIPTS_FILE))
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
     try:
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, "w") as f:
             json.dump(data, f, indent=2)
         os.replace(tmp_path, RECEIPTS_FILE)
     except Exception:
@@ -69,12 +80,23 @@ def _rotate_receipts_file() -> None:
             raise
 
 
-def _find_existing_receipt(data: Dict, agent_id: str, sequence) -> Optional[Dict]:
-    """Check for duplicate (agent_id, sequence) receipt."""
-    for r in data['receipts']:
-        if r.get('agent_id') == agent_id and r.get('sequence') == sequence:
-            return r
-    return None
+def _find_existing_receipt(agent_id: str, sequence: int) -> Optional[Dict]:
+    """O(1) duplicate (agent_id, sequence) lookup via in-memory index."""
+    return _receipt_index.get((agent_id, sequence))
+
+
+def _init_receipt_index() -> None:
+    """Build the in-memory dedup index from on-disk receipts (called at startup)."""
+    global _receipt_index
+    try:
+        data = _load_receipts()
+        _receipt_index = {(r.get("agent_id"), r.get("sequence")): r for r in data["receipts"]}
+    except Exception as e:
+        logger.warning("Failed to initialize receipt index: %s", e)
+        _receipt_index = {}
+
+
+_init_receipt_index()
 
 
 def _verify_client_signature(body: dict) -> bool:
@@ -84,35 +106,34 @@ def _verify_client_signature(body: dict) -> bool:
     The request body must include 'public_key' (hex-encoded Ed25519 public key) for
     verification. 'signing_key_id' is a hash of the key and cannot be used for verification.
     """
-    signature_hex = body.get('signature')
-    public_key_hex = body.get('public_key')
+    signature_hex = body.get("signature")
+    public_key_hex = body.get("public_key")
 
     if not signature_hex:
         # No signature provided — allow for backwards compatibility
         return True
 
     if not public_key_hex:
-        logger.warning(
-            "Checkpoint has signature but no public_key field. "
-            "Cannot verify without the actual public key. Accepting without verification."
-        )
-        return True
+        logger.warning("Checkpoint has signature but no public_key field — rejecting as possible tamper attempt.")
+        return False
 
     if not _has_crypto:
         logger.warning(
-            "Signature verification unavailable (no crypto support). "
-            "Accepting checkpoint without verification."
+            "Signature verification unavailable (no crypto support). Accepting checkpoint without verification."
         )
         return True
 
     try:
         # Reconstruct the signed data (canonical checkpoint fields)
-        sign_data = json.dumps({
-            'agent_id': body.get('agent_id'),
-            'chain_hash': body.get('chain_hash'),
-            'sequence': body.get('sequence'),
-            'timestamp_ms': body.get('timestamp_ms'),
-        }, sort_keys=True).encode()
+        sign_data = json.dumps(
+            {
+                "agent_id": body.get("agent_id"),
+                "chain_hash": body.get("chain_hash"),
+                "sequence": body.get("sequence"),
+                "timestamp_ms": body.get("timestamp_ms"),
+            },
+            sort_keys=True,
+        ).encode()
 
         signature = bytes.fromhex(signature_hex)
         public_key = bytes.fromhex(public_key_hex)
@@ -125,9 +146,9 @@ def _verify_client_signature(body: dict) -> bool:
 
 class WitnessHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path == '/ahp/v1/checkpoints':
+        if self.path == "/ahp/v1/checkpoints":
             # Check request size limit
-            content_length = int(self.headers.get('Content-Length', 0))
+            content_length = int(self.headers.get("Content-Length", 0))
             if content_length > MAX_REQUEST_SIZE:
                 self.send_error(413, "Request body too large")
                 return
@@ -138,6 +159,16 @@ class WitnessHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Invalid JSON")
                 return
 
+            # Validate required fields
+            agent_id = body.get("agent_id")
+            sequence = body.get("sequence")
+            if not isinstance(agent_id, str) or not agent_id:
+                self.send_error(400, "agent_id must be a non-empty string")
+                return
+            if not isinstance(sequence, int) or isinstance(sequence, bool):
+                self.send_error(400, "sequence must be an integer")
+                return
+
             # Verify client signature if provided
             if not _verify_client_signature(body):
                 self.send_error(403, "Invalid signature")
@@ -146,14 +177,12 @@ class WitnessHandler(BaseHTTPRequestHandler):
             with _receipts_lock:
                 # Check for duplicate (agent_id, sequence) — return existing receipt
                 data = _load_receipts()
-                agent_id = body.get('agent_id')
-                sequence = body.get('sequence')
-                existing = _find_existing_receipt(data, agent_id, sequence)
+                existing = _find_existing_receipt(agent_id, sequence)
                 if existing is not None:
                     response = json.dumps(existing).encode()
                     self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Content-Length', str(len(response)))
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(response)))
                     self.end_headers()
                     self.wfile.write(response)
                     return
@@ -162,94 +191,99 @@ class WitnessHandler(BaseHTTPRequestHandler):
                 witness_timestamp = int(time.time() * 1000)
 
                 # Sign the checkpoint + witness timestamp
-                sign_data = json.dumps({
-                    'agent_id': agent_id,
-                    'chain_hash': body.get('chain_hash'),
-                    'sequence': sequence,
-                    'witness_timestamp': witness_timestamp,
-                }, sort_keys=True).encode()
+                sign_data = json.dumps(
+                    {
+                        "agent_id": agent_id,
+                        "chain_hash": body.get("chain_hash"),
+                        "sequence": sequence,
+                        "witness_timestamp": witness_timestamp,
+                    },
+                    sort_keys=True,
+                ).encode()
 
                 if witness_keys:
                     witness_sig = sign(sign_data, witness_keys.private_key_bytes).hex()
                     witness_pub = witness_keys.public_key_bytes.hex()
                 else:
-                    witness_sig = '00' * 64
-                    witness_pub = '00' * 32
+                    witness_sig = "00" * 64
+                    witness_pub = "00" * 32
 
                 receipt = {
-                    'receipt_id': receipt_id,
-                    'witness_id': WITNESS_ID,
-                    'witness_timestamp': witness_timestamp,
-                    'witness_signature': witness_sig,
-                    'witness_public_key': witness_pub,
-                    'agent_id': agent_id,
-                    'chain_hash': body.get('chain_hash'),
-                    'sequence': sequence,
-                    'timestamp_ms': body.get('timestamp_ms'),
+                    "receipt_id": receipt_id,
+                    "witness_id": WITNESS_ID,
+                    "witness_timestamp": witness_timestamp,
+                    "witness_signature": witness_sig,
+                    "witness_public_key": witness_pub,
+                    "agent_id": agent_id,
+                    "chain_hash": body.get("chain_hash"),
+                    "sequence": sequence,
+                    "timestamp_ms": body.get("timestamp_ms"),
                 }
 
                 # Rotate if at the size cap before appending
-                if len(data['receipts']) >= MAX_RECEIPTS:
+                if len(data["receipts"]) >= MAX_RECEIPTS:
                     _rotate_receipts_file()
                     data = {"receipts": []}
+                    _receipt_index.clear()
 
-                data['receipts'].append(receipt)
+                data["receipts"].append(receipt)
                 _save_receipts(data)
+                _receipt_index[(agent_id, sequence)] = receipt
 
             response = json.dumps(receipt).encode()
             self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(response)))
-            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(response)
         else:
             self.send_error(404)
 
     def do_GET(self):
-        if self.path == '/health':
+        if self.path == "/health":
             response = json.dumps({"status": "ok"}).encode()
             self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(response)))
-            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(response)
-        elif self.path == '/ahp/v1/identity':
+        elif self.path == "/ahp/v1/identity":
             identity = {
-                'witness_id': WITNESS_ID,
-                'public_key': witness_keys.public_key_bytes.hex() if witness_keys else '00' * 32,
+                "witness_id": WITNESS_ID,
+                "public_key": witness_keys.public_key_bytes.hex() if witness_keys else "00" * 32,
             }
             response = json.dumps(identity).encode()
             self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(response)))
-            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(response)
-        elif self.path.startswith('/ahp/v1/receipts/'):
-            receipt_id = self.path.split('/')[-1]
+        elif self.path.startswith("/ahp/v1/receipts/"):
+            receipt_id = self.path.split("/")[-1]
             data = _load_receipts()
-            for r in data['receipts']:
-                if r['receipt_id'] == receipt_id:
+            for r in data["receipts"]:
+                if r["receipt_id"] == receipt_id:
                     response = json.dumps(r).encode()
                     self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Content-Length', str(len(response)))
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(response)))
                     self.end_headers()
                     self.wfile.write(response)
                     return
             self.send_error(404)
-        elif self.path.startswith('/ahp/v1/agents/'):
-            parts = self.path.split('/')
-            agent_id = parts[4] if len(parts) > 4 else ''
+        elif self.path.startswith("/ahp/v1/agents/"):
+            parts = self.path.split("/")
+            agent_id = parts[4] if len(parts) > 4 else ""
             data = _load_receipts()
-            agent_receipts = [r for r in data['receipts'] if r.get('agent_id') == agent_id]
+            agent_receipts = [r for r in data["receipts"] if r.get("agent_id") == agent_id]
             response = json.dumps(agent_receipts).encode()
             self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(response)))
-            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(response)
         else:
@@ -260,7 +294,7 @@ class WitnessHandler(BaseHTTPRequestHandler):
 
 
 def main(port: int = 8120):
-    server = HTTPServer(('localhost', port), WitnessHandler)
+    server = HTTPServer(("localhost", port), WitnessHandler)
     print("AHP Reference Witness Server running on http://localhost:%d" % port)
     print("Witness ID: %s" % WITNESS_ID)
     if witness_keys:
@@ -277,7 +311,8 @@ def main(port: int = 8120):
         print("\nWitness server stopped.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8120
     main(port)

@@ -2,6 +2,7 @@
 
 These tests verify the FULL pipeline, not just individual components.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -11,29 +12,35 @@ import tempfile
 import threading
 import time
 import unittest
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from pathlib import Path
-from typing import Optional
-from urllib.request import urlopen, Request
+from http.server import HTTPServer
 
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, AuthorizerType, AuthorizationDecision,
-    ChainLevel, ZERO_UUID,
-)
-from ahp.core.records import (
-    ActionPayload, BootPayload, Authorization, AuthorizationEntry,
-)
 from ahp.core.chain import (
-    ChainWriter, ChainReader, parse_envelope, parse_action_payload,
+    ChainReader,
+    ChainWriter,
+    parse_action_payload,
+    parse_envelope,
 )
-from ahp.core.verify import verify_chain
-from ahp.core.uuid7 import uuid7, uuid7_to_str
-from ahp.core.json_format import record_to_json
 from ahp.core.evidence import EvidenceStore
-from ahp.core.filters import FilterPipeline, Filter, PRESETS
-from ahp.core.signing import generate_keypair, sign, verify_signature, compute_merkle_root
-from ahp.interceptors.http_helper import create_action_from_http, _detect_llm
+from ahp.core.filters import FilterPipeline
+from ahp.core.json_format import record_to_json
+from ahp.core.records import (
+    ActionPayload,
+    Authorization,
+    AuthorizationEntry,
+    BootPayload,
+)
+from ahp.core.signing import compute_merkle_root, generate_keypair, sign, verify_signature
+from ahp.core.types import (
+    ActionType,
+    AuthorizationDecision,
+    AuthorizationType,
+    AuthorizerType,
+    Protocol,
+    ResultStatus,
+)
+from ahp.core.uuid7 import uuid7, uuid7_to_str
+from ahp.core.verify import verify_chain
+from ahp.interceptors.http_helper import _detect_llm, create_action_from_http
 from ahp.interceptors.mcp_helper import create_action_from_mcp
 
 
@@ -57,15 +64,19 @@ class TestHTTPInterceptor(unittest.TestCase):
 
     def test_openai_inference_action(self):
         """Simulate a real OpenAI API call and verify the ActionPayload."""
-        request_body = json.dumps({
-            "model": "gpt-4",
-            "messages": [{"role": "user", "content": "Hello"}],
-        }).encode()
+        request_body = json.dumps(
+            {
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hello"}],
+            }
+        ).encode()
 
-        response_body = json.dumps({
-            "choices": [{"message": {"content": "Hi there!"}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
-        }).encode()
+        response_body = json.dumps(
+            {
+                "choices": [{"message": {"content": "Hi there!"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            }
+        ).encode()
 
         action = create_action_from_http(
             method="POST",
@@ -84,20 +95,24 @@ class TestHTTPInterceptor(unittest.TestCase):
         self.assertEqual(action.result_status, ResultStatus.SUCCESS)
         self.assertEqual(action.response_time_ms, 850)
         self.assertEqual(action.protocol, Protocol.HTTP)
-        self.assertNotEqual(action.parameters_hash, b'\x00' * 16)
-        self.assertNotEqual(action.result_hash, b'\x00' * 16)
+        self.assertNotEqual(action.parameters_hash, b"\x00" * 16)
+        self.assertNotEqual(action.result_hash, b"\x00" * 16)
 
     def test_anthropic_inference_action(self):
         """Simulate an Anthropic API call."""
-        request_body = json.dumps({
-            "model": "claude-sonnet-4-6",
-            "messages": [{"role": "user", "content": "Explain AHP"}],
-        }).encode()
+        request_body = json.dumps(
+            {
+                "model": "claude-sonnet-4-6",
+                "messages": [{"role": "user", "content": "Explain AHP"}],
+            }
+        ).encode()
 
-        response_body = json.dumps({
-            "content": [{"text": "AHP is a protocol..."}],
-            "usage": {"input_tokens": 15, "output_tokens": 100},
-        }).encode()
+        response_body = json.dumps(
+            {
+                "content": [{"text": "AHP is a protocol..."}],
+                "usage": {"input_tokens": 15, "output_tokens": 100},
+            }
+        ).encode()
 
         action = create_action_from_http(
             method="POST",
@@ -135,8 +150,8 @@ class TestHTTPInterceptor(unittest.TestCase):
         action = create_action_from_http(
             method="GET",
             url="https://api.example.com/data",
-            request_body=b'',
-            response_body=b'Internal Server Error',
+            request_body=b"",
+            response_body=b"Internal Server Error",
             status_code=500,
             duration_ms=100,
         )
@@ -148,8 +163,8 @@ class TestHTTPInterceptor(unittest.TestCase):
         action = create_action_from_http(
             method="GET",
             url="https://api.example.com/slow",
-            request_body=b'',
-            response_body=b'Gateway Timeout',
+            request_body=b"",
+            response_body=b"Gateway Timeout",
             status_code=504,
             duration_ms=30000,
         )
@@ -158,12 +173,12 @@ class TestHTTPInterceptor(unittest.TestCase):
 
     def test_http_with_pii_filter(self):
         """HTTP interceptor with PII filter should redact and hash filtered content."""
-        pipeline = FilterPipeline(presets=['credentials'])
+        pipeline = FilterPipeline(presets=["credentials"])
 
         action = create_action_from_http(
             method="POST",
             url="https://api.example.com/data",
-            request_body=b'Authorization: Bearer sk-1234567890abcdef1234567890abcdef',
+            request_body=b"Authorization: Bearer sk-1234567890abcdef1234567890abcdef",
             response_body=b'{"status": "ok"}',
             status_code=200,
             duration_ms=50,
@@ -190,8 +205,8 @@ class TestMCPInterceptor(unittest.TestCase):
         self.assertEqual(action.protocol, Protocol.MCP)
         self.assertEqual(action.result_status, ResultStatus.SUCCESS)
         self.assertEqual(action.response_time_ms, 42)
-        self.assertNotEqual(action.parameters_hash, b'\x00' * 16)
-        self.assertNotEqual(action.result_hash, b'\x00' * 16)
+        self.assertNotEqual(action.parameters_hash, b"\x00" * 16)
+        self.assertNotEqual(action.result_hash, b"\x00" * 16)
 
     def test_failed_tool_call(self):
         action = create_action_from_mcp(
@@ -222,7 +237,7 @@ class TestMCPInterceptor(unittest.TestCase):
         self.assertEqual(a1.result_hash, a2.result_hash)
 
     def test_mcp_with_pii_filter(self):
-        pipeline = FilterPipeline(presets=['pci'])
+        pipeline = FilterPipeline(presets=["pci"])
 
         action = create_action_from_mcp(
             tool_name="process_payment",
@@ -251,24 +266,24 @@ class TestEvidenceStore(unittest.TestCase):
         self.assertEqual(retrieved, payload)
 
     def test_verify(self):
-        payload = b'test payload'
+        payload = b"test payload"
         hash_16 = self.store.store(payload)
         self.assertTrue(self.store.verify(hash_16))
 
     def test_missing_evidence(self):
-        self.assertIsNone(self.store.retrieve(b'\x99' * 16))
-        self.assertFalse(self.store.verify(b'\x99' * 16))
+        self.assertIsNone(self.store.retrieve(b"\x99" * 16))
+        self.assertFalse(self.store.verify(b"\x99" * 16))
 
     def test_content_addressed(self):
         """Same content should produce same hash and not duplicate."""
-        h1 = self.store.store(b'same content')
-        h2 = self.store.store(b'same content')
+        h1 = self.store.store(b"same content")
+        h2 = self.store.store(b"same content")
         self.assertEqual(h1, h2)
-        self.assertEqual(self.store.count()['available'], 1)
+        self.assertEqual(self.store.count()["available"], 1)
 
     def test_different_content_different_hash(self):
-        h1 = self.store.store(b'content A')
-        h2 = self.store.store(b'content B')
+        h1 = self.store.store(b"content A")
+        h2 = self.store.store(b"content B")
         self.assertNotEqual(h1, h2)
 
 
@@ -276,63 +291,55 @@ class TestPIIFilters(unittest.TestCase):
     """Test PII filter pipeline with real PII data."""
 
     def test_credit_card_redaction(self):
-        pipeline = FilterPipeline(presets=['pci'])
-        filtered, redacted = pipeline.apply(
-            b'Card: 4111 1111 1111 1111', scope='parameters'
-        )
+        pipeline = FilterPipeline(presets=["pci"])
+        filtered, redacted = pipeline.apply(b"Card: 4111 1111 1111 1111", scope="parameters")
         self.assertTrue(redacted)
-        self.assertIn(b'[REDACTED:CC]', filtered)
-        self.assertNotIn(b'4111', filtered)
+        self.assertIn(b"[REDACTED:CC]", filtered)
+        self.assertNotIn(b"4111", filtered)
 
     def test_ssn_redaction(self):
-        pipeline = FilterPipeline(presets=['pii-us'])
-        filtered, redacted = pipeline.apply(
-            b'SSN: 123-45-6789', scope='parameters'
-        )
+        pipeline = FilterPipeline(presets=["pii-us"])
+        filtered, redacted = pipeline.apply(b"SSN: 123-45-6789", scope="parameters")
         self.assertTrue(redacted)
-        self.assertIn(b'[REDACTED:SSN]', filtered)
+        self.assertIn(b"[REDACTED:SSN]", filtered)
 
     def test_bearer_token_redaction(self):
-        pipeline = FilterPipeline(presets=['credentials'])
-        filtered, redacted = pipeline.apply(
-            b'Authorization: Bearer sk-1234567890abcdef', scope='parameters'
-        )
+        pipeline = FilterPipeline(presets=["credentials"])
+        filtered, redacted = pipeline.apply(b"Authorization: Bearer sk-1234567890abcdef", scope="parameters")
         self.assertTrue(redacted)
-        self.assertIn(b'[REDACTED:TOKEN]', filtered)
+        self.assertIn(b"[REDACTED:TOKEN]", filtered)
 
     def test_no_match_no_redaction(self):
-        pipeline = FilterPipeline(presets=['pci'])
-        filtered, redacted = pipeline.apply(
-            b'Hello world, no PII here', scope='parameters'
-        )
+        pipeline = FilterPipeline(presets=["pci"])
+        filtered, redacted = pipeline.apply(b"Hello world, no PII here", scope="parameters")
         self.assertFalse(redacted)
-        self.assertEqual(filtered, b'Hello world, no PII here')
+        self.assertEqual(filtered, b"Hello world, no PII here")
 
     def test_binary_payload_skipped(self):
-        pipeline = FilterPipeline(presets=['pci'])
+        pipeline = FilterPipeline(presets=["pci"])
         binary = bytes(range(256))  # non-UTF8 bytes
-        filtered, redacted = pipeline.apply(binary, scope='parameters')
+        filtered, redacted = pipeline.apply(binary, scope="parameters")
         self.assertFalse(redacted)
         self.assertEqual(filtered, binary)
 
     def test_hash_changes_with_filter(self):
         """Filtered content should produce different hash than original."""
-        pipeline = FilterPipeline(presets=['pci'])
-        payload = b'Card: 4111 1111 1111 1111'
+        pipeline = FilterPipeline(presets=["pci"])
+        payload = b"Card: 4111 1111 1111 1111"
 
         hash_no_filter = hashlib.sha256(payload).digest()[:16]
-        hash_filtered, _, _ = pipeline.hash_payload(payload, 'parameters')
+        hash_filtered, _, _ = pipeline.hash_payload(payload, "parameters")
 
         self.assertNotEqual(hash_no_filter, hash_filtered)
 
     def test_config_hash_deterministic(self):
-        p1 = FilterPipeline(presets=['pci', 'credentials'])
-        p2 = FilterPipeline(presets=['pci', 'credentials'])
+        p1 = FilterPipeline(presets=["pci", "credentials"])
+        p2 = FilterPipeline(presets=["pci", "credentials"])
         self.assertEqual(p1.config_hash(), p2.config_hash())
 
     def test_config_hash_changes_with_different_filters(self):
-        p1 = FilterPipeline(presets=['pci'])
-        p2 = FilterPipeline(presets=['credentials'])
+        p1 = FilterPipeline(presets=["pci"])
+        p2 = FilterPipeline(presets=["credentials"])
         self.assertNotEqual(p1.config_hash(), p2.config_hash())
 
 
@@ -348,10 +355,10 @@ class TestSigning(unittest.TestCase):
 
     def test_sign_and_verify(self):
         kp = generate_keypair()
-        message = b'test message for signing'
+        message = b"test message for signing"
         sig = sign(message, kp.private_key_bytes)
 
-        if sig == b'\x00' * 64:
+        if sig == b"\x00" * 64:
             self.skipTest("cryptography library not installed")
 
         self.assertEqual(len(sig), 64)
@@ -360,32 +367,32 @@ class TestSigning(unittest.TestCase):
     def test_wrong_key_fails(self):
         kp1 = generate_keypair()
         kp2 = generate_keypair()
-        message = b'test'
+        message = b"test"
         sig = sign(message, kp1.private_key_bytes)
 
-        if sig == b'\x00' * 64:
+        if sig == b"\x00" * 64:
             self.skipTest("cryptography library not installed")
 
         self.assertFalse(verify_signature(message, sig, kp2.public_key_bytes))
 
     def test_tampered_message_fails(self):
         kp = generate_keypair()
-        sig = sign(b'original', kp.private_key_bytes)
+        sig = sign(b"original", kp.private_key_bytes)
 
-        if sig == b'\x00' * 64:
+        if sig == b"\x00" * 64:
             self.skipTest("cryptography library not installed")
 
-        self.assertFalse(verify_signature(b'tampered', sig, kp.public_key_bytes))
+        self.assertFalse(verify_signature(b"tampered", sig, kp.public_key_bytes))
 
     def test_merkle_root_single(self):
-        h = hashlib.sha256(b'test').digest()
+        h = hashlib.sha256(b"test").digest()
         root = compute_merkle_root([h])
         # RFC 6962 leaf prefix: root of single element is SHA256(0x00 + h)
-        expected = hashlib.sha256(b'\x00' + h).digest()
+        expected = hashlib.sha256(b"\x00" + h).digest()
         self.assertEqual(root, expected)
 
     def test_merkle_root_multiple(self):
-        hashes = [hashlib.sha256(f'record{i}'.encode()).digest() for i in range(5)]
+        hashes = [hashlib.sha256(f"record{i}".encode()).digest() for i in range(5)]
         root = compute_merkle_root(hashes)
         self.assertEqual(len(root), 32)
         # Same input should produce same root
@@ -393,8 +400,8 @@ class TestSigning(unittest.TestCase):
         self.assertEqual(root, root2)
 
     def test_merkle_root_order_matters(self):
-        h1 = hashlib.sha256(b'a').digest()
-        h2 = hashlib.sha256(b'b').digest()
+        h1 = hashlib.sha256(b"a").digest()
+        h2 = hashlib.sha256(b"b").digest()
         r1 = compute_merkle_root([h1, h2])
         r2 = compute_merkle_root([h2, h1])
         self.assertNotEqual(r1, r2)
@@ -419,40 +426,46 @@ class TestMultiAgent(unittest.TestCase):
         writer_b = ChainWriter(chain_b, agent_id=agent_b_id, session_id=session_id)
 
         # Agent B approves Agent A's request (Agent B's chain)
-        approval_record = writer_b.write_record(ActionPayload(
-            tool_name="authorization_decision",
-            parameters_hash=hashlib.sha256(b'delete_account request').digest()[:16],
-            result_hash=hashlib.sha256(b'APPROVED').digest()[:16],
-            result_status=ResultStatus.SUCCESS,
-            response_time_ms=50,
-            protocol=Protocol.A2A,
-            action_type=ActionType.MESSAGE,
-            target_entity=f"agent:{uuid7_to_str(agent_a_id)}",
-            authorization=Authorization(type=AuthorizationType.AUTH_NONE),
-        ))
+        approval_record = writer_b.write_record(
+            ActionPayload(
+                tool_name="authorization_decision",
+                parameters_hash=hashlib.sha256(b"delete_account request").digest()[:16],
+                result_hash=hashlib.sha256(b"APPROVED").digest()[:16],
+                result_status=ResultStatus.SUCCESS,
+                response_time_ms=50,
+                protocol=Protocol.A2A,
+                action_type=ActionType.MESSAGE,
+                target_entity=f"agent:{uuid7_to_str(agent_a_id)}",
+                authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+            )
+        )
 
         # Agent A executes with Agent B's authorization (Agent A's chain)
-        writer_a.write_record(ActionPayload(
-            tool_name="delete_account",
-            parameters_hash=hashlib.sha256(b'{"user_id": 103}').digest()[:16],
-            result_hash=hashlib.sha256(b'{"status": "deleted"}').digest()[:16],
-            result_status=ResultStatus.SUCCESS,
-            response_time_ms=200,
-            protocol=Protocol.MCP,
-            action_type=ActionType.TOOL_CALL,
-            target_entity="user:103",
-            authorization=Authorization(
-                type=AuthorizationType.AUTH_AGENT,
-                entries=[AuthorizationEntry(
-                    authorizer_type=AuthorizerType.AUTHORIZER_AGENT,
-                    authorizer_id="supervisor-bot",
-                    authorizer_agent_id=agent_b_id,
-                    authorizer_seq=approval_record.sequence,
-                    decision=AuthorizationDecision.APPROVED,
-                    timestamp_ms=int(time.time() * 1000),
-                )],
-            ),
-        ))
+        writer_a.write_record(
+            ActionPayload(
+                tool_name="delete_account",
+                parameters_hash=hashlib.sha256(b'{"user_id": 103}').digest()[:16],
+                result_hash=hashlib.sha256(b'{"status": "deleted"}').digest()[:16],
+                result_status=ResultStatus.SUCCESS,
+                response_time_ms=200,
+                protocol=Protocol.MCP,
+                action_type=ActionType.TOOL_CALL,
+                target_entity="user:103",
+                authorization=Authorization(
+                    type=AuthorizationType.AUTH_AGENT,
+                    entries=[
+                        AuthorizationEntry(
+                            authorizer_type=AuthorizerType.AUTHORIZER_AGENT,
+                            authorizer_id="supervisor-bot",
+                            authorizer_agent_id=agent_b_id,
+                            authorizer_seq=approval_record.sequence,
+                            decision=AuthorizationDecision.APPROVED,
+                            timestamp_ms=int(time.time() * 1000),
+                        )
+                    ],
+                ),
+            )
+        )
 
         # Verify both chains are valid
         result_a = verify_chain(chain_a)
@@ -465,41 +478,45 @@ class TestMultiAgent(unittest.TestCase):
         reader_a = ChainReader(chain_a)
         records_a = reader_a.read_all()
         env_a = parse_envelope(records_a[0])
-        payload_a = parse_action_payload(env_a['payload_bytes'])
+        payload_a = parse_action_payload(env_a["payload_bytes"])
 
-        auth_entry = payload_a['authorization']['entries'][0]
-        self.assertEqual(auth_entry['authorizer_agent_id'], agent_b_id)
-        self.assertEqual(auth_entry['authorizer_seq'], approval_record.sequence)
+        auth_entry = payload_a["authorization"]["entries"][0]
+        self.assertEqual(auth_entry["authorizer_agent_id"], agent_b_id)
+        self.assertEqual(auth_entry["authorizer_seq"], approval_record.sequence)
 
         # Verify the referenced record exists in Agent B's chain
         reader_b = ChainReader(chain_b)
         records_b = reader_b.read_all()
         env_b = parse_envelope(records_b[0])
-        self.assertEqual(env_b['sequence'], auth_entry['authorizer_seq'])
+        self.assertEqual(env_b["sequence"], auth_entry["authorizer_seq"])
 
     def test_rejected_authorization(self):
         """Agent tries action, gets rejected. Recorded with ERROR status."""
         chain_path = os.path.join(self.tmpdir, "rejected.ahp")
         writer = ChainWriter(chain_path)
 
-        writer.write_record(ActionPayload(
-            tool_name="delete_database",
-            parameters_hash=hashlib.sha256(b'{"db": "production"}').digest()[:16],
-            result_hash=b'\x00' * 16,  # no result — action never executed
-            result_status=ResultStatus.ERROR,
-            response_time_ms=0,
-            protocol=Protocol.MCP,
-            action_type=ActionType.TOOL_CALL,
-            authorization=Authorization(
-                type=AuthorizationType.AUTH_POLICY,
-                entries=[AuthorizationEntry(
-                    authorizer_type=AuthorizerType.AUTHORIZER_POLICY_ENGINE,
-                    authorizer_id="openshell:production-safety",
-                    decision=AuthorizationDecision.REJECTED,
-                    timestamp_ms=int(time.time() * 1000),
-                )],
-            ),
-        ))
+        writer.write_record(
+            ActionPayload(
+                tool_name="delete_database",
+                parameters_hash=hashlib.sha256(b'{"db": "production"}').digest()[:16],
+                result_hash=b"\x00" * 16,  # no result — action never executed
+                result_status=ResultStatus.ERROR,
+                response_time_ms=0,
+                protocol=Protocol.MCP,
+                action_type=ActionType.TOOL_CALL,
+                authorization=Authorization(
+                    type=AuthorizationType.AUTH_POLICY,
+                    entries=[
+                        AuthorizationEntry(
+                            authorizer_type=AuthorizerType.AUTHORIZER_POLICY_ENGINE,
+                            authorizer_id="openshell:production-safety",
+                            decision=AuthorizationDecision.REJECTED,
+                            timestamp_ms=int(time.time() * 1000),
+                        )
+                    ],
+                ),
+            )
+        )
 
         # Chain is valid even with rejected actions
         result = verify_chain(chain_path)
@@ -509,12 +526,12 @@ class TestMultiAgent(unittest.TestCase):
         reader = ChainReader(chain_path)
         records = reader.read_all()
         env = parse_envelope(records[0])
-        payload = parse_action_payload(env['payload_bytes'])
+        payload = parse_action_payload(env["payload_bytes"])
 
-        self.assertEqual(payload['result_status'], ResultStatus.ERROR.value)
-        self.assertEqual(payload['result_hash'], b'\x00' * 16)
+        self.assertEqual(payload["result_status"], ResultStatus.ERROR.value)
+        self.assertEqual(payload["result_hash"], b"\x00" * 16)
         self.assertEqual(
-            payload['authorization']['entries'][0]['decision'],
+            payload["authorization"]["entries"][0]["decision"],
             AuthorizationDecision.REJECTED.value,
         )
 
@@ -524,34 +541,36 @@ class TestMultiAgent(unittest.TestCase):
         supervisor_id = uuid7()
         writer = ChainWriter(chain_path)
 
-        writer.write_record(ActionPayload(
-            tool_name="transfer_funds",
-            parameters_hash=hashlib.sha256(b'{"amount": 50000}').digest()[:16],
-            result_hash=hashlib.sha256(b'{"tx_id": "TX-001"}').digest()[:16],
-            result_status=ResultStatus.SUCCESS,
-            response_time_ms=500,
-            protocol=Protocol.HTTP,
-            action_type=ActionType.TOOL_CALL,
-            authorization=Authorization(
-                type=AuthorizationType.AUTH_MULTI_PARTY,
-                entries=[
-                    AuthorizationEntry(
-                        authorizer_type=AuthorizerType.AUTHORIZER_AGENT,
-                        authorizer_id="compliance-bot",
-                        authorizer_agent_id=supervisor_id,
-                        authorizer_seq=100,
-                        decision=AuthorizationDecision.APPROVED,
-                        timestamp_ms=int(time.time() * 1000) - 2000,
-                    ),
-                    AuthorizationEntry(
-                        authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
-                        authorizer_id="user:cfo@company.com",
-                        decision=AuthorizationDecision.APPROVED,
-                        timestamp_ms=int(time.time() * 1000),
-                    ),
-                ],
-            ),
-        ))
+        writer.write_record(
+            ActionPayload(
+                tool_name="transfer_funds",
+                parameters_hash=hashlib.sha256(b'{"amount": 50000}').digest()[:16],
+                result_hash=hashlib.sha256(b'{"tx_id": "TX-001"}').digest()[:16],
+                result_status=ResultStatus.SUCCESS,
+                response_time_ms=500,
+                protocol=Protocol.HTTP,
+                action_type=ActionType.TOOL_CALL,
+                authorization=Authorization(
+                    type=AuthorizationType.AUTH_MULTI_PARTY,
+                    entries=[
+                        AuthorizationEntry(
+                            authorizer_type=AuthorizerType.AUTHORIZER_AGENT,
+                            authorizer_id="compliance-bot",
+                            authorizer_agent_id=supervisor_id,
+                            authorizer_seq=100,
+                            decision=AuthorizationDecision.APPROVED,
+                            timestamp_ms=int(time.time() * 1000) - 2000,
+                        ),
+                        AuthorizationEntry(
+                            authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
+                            authorizer_id="user:cfo@company.com",
+                            decision=AuthorizationDecision.APPROVED,
+                            timestamp_ms=int(time.time() * 1000),
+                        ),
+                    ],
+                ),
+            )
+        )
 
         result = verify_chain(chain_path)
         self.assertTrue(result.valid)
@@ -560,10 +579,10 @@ class TestMultiAgent(unittest.TestCase):
         records = reader.read_all()
         j = record_to_json(records[0])
 
-        self.assertEqual(j['payload']['authorization']['type'], 'AUTH_MULTI_PARTY')
-        self.assertEqual(len(j['payload']['authorization']['entries']), 2)
-        self.assertEqual(j['payload']['authorization']['entries'][0]['authorizer_type'], 'AUTHORIZER_AGENT')
-        self.assertEqual(j['payload']['authorization']['entries'][1]['authorizer_type'], 'AUTHORIZER_HUMAN')
+        self.assertEqual(j["payload"]["authorization"]["type"], "AUTH_MULTI_PARTY")
+        self.assertEqual(len(j["payload"]["authorization"]["entries"]), 2)
+        self.assertEqual(j["payload"]["authorization"]["entries"][0]["authorizer_type"], "AUTHORIZER_AGENT")
+        self.assertEqual(j["payload"]["authorization"]["entries"][1]["authorizer_type"], "AUTHORIZER_HUMAN")
 
 
 class TestEndToEndFlow(unittest.TestCase):
@@ -579,26 +598,32 @@ class TestEndToEndFlow(unittest.TestCase):
 
         writer = ChainWriter(chain_path)
         store = EvidenceStore(evidence_path)
-        pipeline = FilterPipeline(presets=['pci', 'credentials'])
+        pipeline = FilterPipeline(presets=["pci", "credentials"])
 
         # 1. Boot record
-        writer.write_record(BootPayload(
-            agent_name="e2e-test-bot",
-            interceptors=["http", "mcp"],
-            inference_recording=True,
-            authorization_recording=True,
-            filter_config_hash=pipeline.config_hash(),
-        ))
+        writer.write_record(
+            BootPayload(
+                agent_name="e2e-test-bot",
+                interceptors=["http", "mcp"],
+                inference_recording=True,
+                authorization_recording=True,
+                filter_config_hash=pipeline.config_hash(),
+            )
+        )
 
         # 2. Simulate LLM inference via HTTP interceptor
-        request_body = json.dumps({
-            "model": "claude-sonnet-4-6",
-            "messages": [{"role": "user", "content": "Process payment"}],
-        }).encode()
-        response_body = json.dumps({
-            "content": [{"text": "I'll process the payment now."}],
-            "usage": {"input_tokens": 20, "output_tokens": 30},
-        }).encode()
+        request_body = json.dumps(
+            {
+                "model": "claude-sonnet-4-6",
+                "messages": [{"role": "user", "content": "Process payment"}],
+            }
+        ).encode()
+        response_body = json.dumps(
+            {
+                "content": [{"text": "I'll process the payment now."}],
+                "usage": {"input_tokens": 20, "output_tokens": 30},
+            }
+        ).encode()
 
         inference_action = create_action_from_http(
             method="POST",
@@ -628,12 +653,14 @@ class TestEndToEndFlow(unittest.TestCase):
         mcp_action.parent_action_id = inference_record.record_id
         mcp_action.authorization = Authorization(
             type=AuthorizationType.AUTH_HUMAN,
-            entries=[AuthorizationEntry(
-                authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
-                authorizer_id="user:operator",
-                decision=AuthorizationDecision.APPROVED,
-                timestamp_ms=int(time.time() * 1000),
-            )],
+            entries=[
+                AuthorizationEntry(
+                    authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
+                    authorizer_id="user:operator",
+                    decision=AuthorizationDecision.APPROVED,
+                    timestamp_ms=int(time.time() * 1000),
+                )
+            ],
         )
         writer.write_record(mcp_action)
 
@@ -649,28 +676,28 @@ class TestEndToEndFlow(unittest.TestCase):
 
         # Boot record
         j0 = record_to_json(records[0])
-        self.assertEqual(j0['type'], 'BOOT')
-        self.assertEqual(j0['payload']['agent_name'], 'e2e-test-bot')
-        self.assertTrue(j0['payload']['authorization_recording'])
+        self.assertEqual(j0["type"], "BOOT")
+        self.assertEqual(j0["payload"]["agent_name"], "e2e-test-bot")
+        self.assertTrue(j0["payload"]["authorization_recording"])
 
         # Inference record
         j1 = record_to_json(records[1])
-        self.assertEqual(j1['payload']['action_type'], 'INFERENCE')
-        self.assertEqual(j1['payload']['model_id'], 'claude-sonnet-4-6')
-        self.assertEqual(j1['payload']['input_token_count'], 20)
-        self.assertEqual(j1['payload']['output_token_count'], 30)
+        self.assertEqual(j1["payload"]["action_type"], "INFERENCE")
+        self.assertEqual(j1["payload"]["model_id"], "claude-sonnet-4-6")
+        self.assertEqual(j1["payload"]["input_token_count"], 20)
+        self.assertEqual(j1["payload"]["output_token_count"], 30)
 
         # Tool call with authorization
         j2 = record_to_json(records[2])
-        self.assertEqual(j2['payload']['tool_name'], 'charge_card')
-        self.assertTrue(j2['payload']['redacted'])  # PII filter caught CC
-        self.assertEqual(j2['payload']['authorization']['type'], 'AUTH_HUMAN')
-        self.assertEqual(j2['payload']['authorization']['entries'][0]['decision'], 'APPROVED')
+        self.assertEqual(j2["payload"]["tool_name"], "charge_card")
+        self.assertTrue(j2["payload"]["redacted"])  # PII filter caught CC
+        self.assertEqual(j2["payload"]["authorization"]["type"], "AUTH_HUMAN")
+        self.assertEqual(j2["payload"]["authorization"]["entries"][0]["decision"], "APPROVED")
         # Parent links to inference
-        self.assertIsNotNone(j2['payload']['parent_action_id'])
+        self.assertIsNotNone(j2["payload"]["parent_action_id"])
 
         # 6. Evidence store has the files
-        self.assertEqual(store.count()['available'], 2)
+        self.assertEqual(store.count()["available"], 2)
 
 
 class TestWitnessServerClient(unittest.TestCase):
@@ -678,11 +705,11 @@ class TestWitnessServerClient(unittest.TestCase):
 
     def test_witness_round_trip(self):
         """Start witness server, send checkpoint, get receipt."""
-        from witness.server import WitnessHandler, WITNESS_ID
-        import json
+
+        from witness.server import WITNESS_ID, WitnessHandler
 
         # Start server on random port
-        server = HTTPServer(('localhost', 0), WitnessHandler)
+        server = HTTPServer(("localhost", 0), WitnessHandler)
         port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -691,7 +718,8 @@ class TestWitnessServerClient(unittest.TestCase):
             endpoint = f"http://localhost:{port}"
 
             # Send checkpoint
-            from ahp.core.witness_client import send_checkpoint, get_identity
+            from ahp.core.witness_client import get_identity, send_checkpoint
+
             receipt = send_checkpoint(
                 endpoint=endpoint,
                 agent_id="test-agent-id",
@@ -701,19 +729,19 @@ class TestWitnessServerClient(unittest.TestCase):
             )
 
             self.assertIsNotNone(receipt, "Witness returned no receipt")
-            self.assertEqual(receipt['witness_id'], WITNESS_ID)
-            self.assertEqual(receipt['sequence'], 100)
-            self.assertIn('witness_timestamp', receipt)
-            self.assertIn('witness_signature', receipt)
+            self.assertEqual(receipt["witness_id"], WITNESS_ID)
+            self.assertEqual(receipt["sequence"], 100)
+            self.assertIn("witness_timestamp", receipt)
+            self.assertIn("witness_signature", receipt)
 
             # Get identity
             identity = get_identity(endpoint)
             self.assertIsNotNone(identity)
-            self.assertEqual(identity['witness_id'], WITNESS_ID)
+            self.assertEqual(identity["witness_id"], WITNESS_ID)
 
         finally:
             server.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ Implements the recovery protocol from spec Section 3.6.
 from __future__ import annotations
 
 import hashlib
+import logging
 import struct
 import zlib
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from pathlib import Path
 from ahp.core.chain import HEADER_SIZE, MAGIC, parse_envelope
 from ahp.core.types import ZERO_HASH_32
 from ahp.core.validation import MAX_RECORD_SIZE
+
+logger = logging.getLogger("ahp.core.recovery")
 
 
 @dataclass
@@ -58,8 +61,6 @@ def scan_chain(path: str) -> RecoveryResult:
             )
 
         while True:
-            f.tell()
-
             length_bytes = f.read(4)
             if len(length_bytes) < 4:
                 break
@@ -89,8 +90,8 @@ def scan_chain(path: str) -> RecoveryResult:
             try:
                 env = parse_envelope(stored)
                 last_valid_seq = env["sequence"]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("parse_envelope failed for valid record bytes: %s: %s", type(exc).__name__, exc)
 
     # Compute prev_hash for continuation
     if last_stored_bytes:

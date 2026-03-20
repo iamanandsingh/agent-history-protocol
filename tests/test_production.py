@@ -1,27 +1,35 @@
 """Production readiness tests — sustained load, backpressure, validation, fsync."""
+
 from __future__ import annotations
 
 import asyncio
 import os
 import tempfile
-import time
 import threading
+import time
 import unittest
 
-from ahp.core.types import (
-    RecordType, ResultStatus, Protocol, ActionType,
-    AuthorizationType, AuthorizerType, AuthorizationDecision,
-)
-from ahp.core.records import (
-    ActionPayload, BootPayload, Authorization, AuthorizationEntry,
-)
-from ahp.core.chain import ChainWriter, ChainReader, parse_envelope
 from ahp.core.async_chain import AsyncChainWriter
-from ahp.core.verify import verify_chain
-from ahp.core.validation import validate_record, ValidationError
-from ahp.core.records import Record
-from ahp.core.types import ZERO_HASH_32, SCHEMA_VERSION
+from ahp.core.chain import ChainWriter
+from ahp.core.records import (
+    ActionPayload,
+    Authorization,
+    AuthorizationEntry,
+    Record,
+)
+from ahp.core.types import (
+    SCHEMA_VERSION,
+    ZERO_HASH_32,
+    ActionType,
+    AuthorizationType,
+    AuthorizerType,
+    Protocol,
+    RecordType,
+    ResultStatus,
+)
 from ahp.core.uuid7 import uuid7
+from ahp.core.validation import validate_record
+from ahp.core.verify import verify_chain
 
 
 def _payload(i: int) -> ActionPayload:
@@ -172,9 +180,13 @@ class TestInputValidation(unittest.TestCase):
 
     def test_valid_record(self):
         record = Record(
-            record_id=uuid7(), agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=int(time.time() * 1000), sequence=1,
-            prev_hash=ZERO_HASH_32, schema_version=SCHEMA_VERSION,
+            record_id=uuid7(),
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=int(time.time() * 1000),
+            sequence=1,
+            prev_hash=ZERO_HASH_32,
+            schema_version=SCHEMA_VERSION,
             record_type=RecordType.ACTION,
             payload=_payload(0),
         )
@@ -183,10 +195,14 @@ class TestInputValidation(unittest.TestCase):
 
     def test_invalid_record_id_length(self):
         record = Record(
-            record_id=b'\x01' * 8,  # Wrong length
-            agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=1, sequence=1, prev_hash=ZERO_HASH_32,
-            schema_version=1, record_type=RecordType.ACTION,
+            record_id=b"\x01" * 8,  # Wrong length
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=1,
+            sequence=1,
+            prev_hash=ZERO_HASH_32,
+            schema_version=1,
+            record_type=RecordType.ACTION,
             payload=_payload(0),
         )
         errors = validate_record(record)
@@ -201,9 +217,15 @@ class TestInputValidation(unittest.TestCase):
             authorization=Authorization(type=AuthorizationType.AUTH_NONE),
         )
         record = Record(
-            record_id=uuid7(), agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=1, sequence=1, prev_hash=ZERO_HASH_32,
-            schema_version=1, record_type=RecordType.ACTION, payload=payload,
+            record_id=uuid7(),
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=1,
+            sequence=1,
+            prev_hash=ZERO_HASH_32,
+            schema_version=1,
+            record_type=RecordType.ACTION,
+            payload=payload,
         )
         errors = validate_record(record)
         self.assertGreater(len(errors), 0)
@@ -217,16 +239,24 @@ class TestInputValidation(unittest.TestCase):
             action_type=ActionType.TOOL_CALL,
             authorization=Authorization(
                 type=AuthorizationType.AUTH_NONE,
-                entries=[AuthorizationEntry(
-                    authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
-                    authorizer_id="user:test",
-                )],
+                entries=[
+                    AuthorizationEntry(
+                        authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
+                        authorizer_id="user:test",
+                    )
+                ],
             ),
         )
         record = Record(
-            record_id=uuid7(), agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=1, sequence=1, prev_hash=ZERO_HASH_32,
-            schema_version=1, record_type=RecordType.ACTION, payload=payload,
+            record_id=uuid7(),
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=1,
+            sequence=1,
+            prev_hash=ZERO_HASH_32,
+            schema_version=1,
+            record_type=RecordType.ACTION,
+            payload=payload,
         )
         errors = validate_record(record)
         self.assertTrue(any("AUTH_NONE must have 0 entries" in e for e in errors))
@@ -239,16 +269,24 @@ class TestInputValidation(unittest.TestCase):
             action_type=ActionType.TOOL_CALL,
             authorization=Authorization(
                 type=AuthorizationType.AUTH_MULTI_PARTY,
-                entries=[AuthorizationEntry(
-                    authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
-                    authorizer_id="user:test",
-                )],
+                entries=[
+                    AuthorizationEntry(
+                        authorizer_type=AuthorizerType.AUTHORIZER_HUMAN,
+                        authorizer_id="user:test",
+                    )
+                ],
             ),
         )
         record = Record(
-            record_id=uuid7(), agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=1, sequence=1, prev_hash=ZERO_HASH_32,
-            schema_version=1, record_type=RecordType.ACTION, payload=payload,
+            record_id=uuid7(),
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=1,
+            sequence=1,
+            prev_hash=ZERO_HASH_32,
+            schema_version=1,
+            record_type=RecordType.ACTION,
+            payload=payload,
         )
         errors = validate_record(record)
         self.assertTrue(any("MULTI_PARTY" in e for e in errors))
@@ -261,28 +299,43 @@ class TestInputValidation(unittest.TestCase):
             action_type=ActionType.TOOL_CALL,
             authorization=Authorization(
                 type=AuthorizationType.AUTH_AGENT,
-                entries=[AuthorizationEntry(
-                    authorizer_type=AuthorizerType.AUTHORIZER_AGENT,
-                    authorizer_id="supervisor",
-                    # authorizer_agent_id is zero bytes — should fail
-                )],
+                entries=[
+                    AuthorizationEntry(
+                        authorizer_type=AuthorizerType.AUTHORIZER_AGENT,
+                        authorizer_id="supervisor",
+                        # authorizer_agent_id is zero bytes — should fail
+                    )
+                ],
             ),
         )
         record = Record(
-            record_id=uuid7(), agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=1, sequence=1, prev_hash=ZERO_HASH_32,
-            schema_version=1, record_type=RecordType.ACTION, payload=payload,
+            record_id=uuid7(),
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=1,
+            sequence=1,
+            prev_hash=ZERO_HASH_32,
+            schema_version=1,
+            record_type=RecordType.ACTION,
+            payload=payload,
         )
         errors = validate_record(record)
         self.assertTrue(any("authorizer_agent_id" in e for e in errors))
 
     def test_gap_count_mismatch(self):
         from ahp.core.records import GapPayload
+
         payload = GapPayload(first_lost_sequence=5, last_lost_sequence=10, count=99)
         record = Record(
-            record_id=uuid7(), agent_id=uuid7(), session_id=uuid7(),
-            timestamp_ms=1, sequence=11, prev_hash=ZERO_HASH_32,
-            schema_version=1, record_type=RecordType.GAP, payload=payload,
+            record_id=uuid7(),
+            agent_id=uuid7(),
+            session_id=uuid7(),
+            timestamp_ms=1,
+            sequence=11,
+            prev_hash=ZERO_HASH_32,
+            schema_version=1,
+            record_type=RecordType.GAP,
+            payload=payload,
         )
         errors = validate_record(record)
         self.assertTrue(any("count mismatch" in e for e in errors))
@@ -315,5 +368,5 @@ class TestBackpressure(unittest.TestCase):
         self.assertTrue(result.valid)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

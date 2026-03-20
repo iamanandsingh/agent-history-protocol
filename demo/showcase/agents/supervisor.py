@@ -2,28 +2,26 @@
 
 Runs as an HTTP server that other agents can request approval from.
 """
+
 from __future__ import annotations
 
 import json
-import time
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Optional, Dict
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from ahp.core.types import (
-    ResultStatus, Protocol, ActionType,
-    AuthorizationType, AuthorizerType, AuthorizationDecision,
-    ChainLevel,
-)
-from ahp.core.records import (
-    BootPayload, ActionPayload, Authorization, AuthorizationEntry,
-)
 from ahp.core.chain import ChainWriter
+from ahp.core.records import (
+    BootPayload,
+)
+from ahp.core.types import (
+    ActionType,
+    ChainLevel,
+    Protocol,
+)
 from ahp.core.uuid7 import uuid7
 from ahp.interceptors.mcp_helper import create_action_from_mcp
-
 from demo.showcase.llm import GeminiClient
-
 
 SYSTEM_PROMPT = """You are a supervisor agent that reviews and approves high-risk actions.
 
@@ -43,8 +41,7 @@ Be concise. Just the JSON."""
 class SupervisorAgent:
     """Supervisor agent that runs as HTTP server and evaluates approval requests."""
 
-    def __init__(self, api_key: str, model: str, endpoint: str,
-                 chain_path: str, port: int = 8200):
+    def __init__(self, api_key: str, model: str, endpoint: str, chain_path: str, port: int = 8200):
         self.agent_id = uuid7()
         self.writer = ChainWriter(chain_path, agent_id=self.agent_id)
         self.port = port
@@ -56,14 +53,16 @@ class SupervisorAgent:
         self.endpoint = endpoint
 
         # Boot record
-        self.writer.write_record(BootPayload(
-            agent_name="supervisor-bot",
-            interceptors=["http"],
-            runtime="python 3.9",
-            chain_level=ChainLevel.LEVEL_1,
-            inference_recording=True,
-            authorization_recording=True,
-        ))
+        self.writer.write_record(
+            BootPayload(
+                agent_name="supervisor-bot",
+                interceptors=["http"],
+                runtime="python 3.9",
+                chain_level=ChainLevel.LEVEL_1,
+                inference_recording=True,
+                authorization_recording=True,
+            )
+        )
 
     def start(self) -> str:
         """Start the supervisor HTTP server. Returns the URL."""
@@ -71,15 +70,15 @@ class SupervisorAgent:
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
-                if self.path == '/approve':
-                    content_length = int(self.headers.get('Content-Length', 0))
+                if self.path == "/approve":
+                    content_length = int(self.headers.get("Content-Length", 0))
                     body = json.loads(self.rfile.read(content_length))
                     result = agent._handle_approval(body)
 
                     response = json.dumps(result).encode()
                     self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Content-Length', str(len(response)))
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(response)))
                     self.end_headers()
                     self.wfile.write(response)
                 else:
@@ -88,7 +87,7 @@ class SupervisorAgent:
             def log_message(self, format, *args):
                 pass
 
-        self.server = HTTPServer(('localhost', self.port), Handler)
+        self.server = HTTPServer(("localhost", self.port), Handler)
         self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._thread.start()
         return f"http://localhost:{self.port}"
@@ -101,8 +100,11 @@ class SupervisorAgent:
         """Evaluate an approval request using the LLM."""
         session_id = uuid7()
         llm = GeminiClient(
-            self.api_key, self.model, self.endpoint,
-            self.writer, session_id=session_id,
+            self.api_key,
+            self.model,
+            self.endpoint,
+            self.writer,
+            session_id=session_id,
         )
 
         action = request.get("action", "unknown")
@@ -127,8 +129,8 @@ class SupervisorAgent:
         if not response.get("error"):
             try:
                 text = response["text"]
-                start = text.find('{')
-                end = text.rfind('}') + 1
+                start = text.find("{")
+                end = text.rfind("}") + 1
                 if start >= 0 and end > start:
                     decision = json.loads(text[start:end])
                     approved = decision.get("approved", True)

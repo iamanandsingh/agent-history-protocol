@@ -9,6 +9,7 @@ Usage:
 Opens a browser with the viewer. Drag & drop any .ahp chain file to inspect it,
 or pass --chain to auto-load one.
 """
+
 from __future__ import annotations
 
 import http.server
@@ -30,12 +31,12 @@ class ViewerHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         """Accept chain file uploads from the viewer."""
-        if self.path == '/api/chain':
-            content_length = int(self.headers.get('Content-Length', 0))
+        if self.path == "/api/chain":
+            content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             # Save uploaded chain to temp location
-            upload_path = os.path.join(VIEWER_DIR, '_uploaded_chain.ahp')
-            with open(upload_path, 'wb') as f:
+            upload_path = os.path.join(VIEWER_DIR, "_uploaded_chain.ahp")
+            with open(upload_path, "wb") as f:
                 f.write(body)
             self._json_response(200, {"status": "ok", "path": upload_path})
         else:
@@ -44,8 +45,8 @@ class ViewerHandler(http.server.SimpleHTTPRequestHandler):
     def _json_response(self, code: int, data: dict) -> None:
         body = json.dumps(data).encode()
         self.send_response(code)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(body)))
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
@@ -61,7 +62,7 @@ def main():
     args = sys.argv[1:]
     i = 0
     while i < len(args):
-        if args[i] == '--chain' and i + 1 < len(args):
+        if args[i] == "--chain" and i + 1 < len(args):
             chain_path = args[i + 1]
             i += 2
         elif args[i].isdigit():
@@ -73,7 +74,7 @@ def main():
     # If --chain specified, copy to viewer dir for easy loading
     if chain_path:
         src = Path(chain_path).resolve()
-        dst = (Path(VIEWER_DIR) / 'demo-chain.ahp').resolve()
+        dst = (Path(VIEWER_DIR) / "demo-chain.ahp").resolve()
         if not src.exists():
             print(f"Warning: chain file not found: {chain_path}")
         elif src != dst:
@@ -85,13 +86,13 @@ def main():
     server = http.server.HTTPServer(("localhost", port), ViewerHandler)
     url = f"http://localhost:{port}/index.html"
 
-    print(f"\nAHP Chain Viewer")
+    print("\nAHP Chain Viewer")
     print(f"  URL:    {url}")
     print(f"  Viewer: {VIEWER_DIR}")
     if chain_path:
         print(f"  Chain:  {chain_path} (pre-loaded as demo-chain.ahp)")
-    print(f"\n  Drag & drop any .ahp file onto the viewer to inspect it.")
-    print(f"  Press Ctrl+C to stop.\n")
+    print("\n  Drag & drop any .ahp file onto the viewer to inspect it.")
+    print("  Press Ctrl+C to stop.\n")
 
     webbrowser.open(url)
 

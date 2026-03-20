@@ -57,7 +57,8 @@ def verify_chain(path: str) -> VerifyResult:
                     error="Genesis record prev_hash is not zero bytes",
                 )
         else:
-            assert prev_stored is not None  # set in previous iteration when i > 0
+            if prev_stored is None:  # should never happen when i > 0
+                raise RuntimeError(f"prev_stored is None at record index {i}, sequence {seq}")
             expected_hash = hashlib.sha256(prev_stored).digest()
             if prev_hash != expected_hash:
                 return VerifyResult(
