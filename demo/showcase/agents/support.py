@@ -19,22 +19,29 @@ from ahp.core.uuid7 import uuid7
 from demo.showcase.llm import GeminiClient
 from demo.showcase.tools import ToolExecutor
 
-SYSTEM_PROMPT = """You are a customer support agent. You help customers with their requests.
+SYSTEM_PROMPT = """You are a customer support agent for an online store. You help customers with their requests.
+
+IMPORTANT RULES:
+1. You MUST ONLY respond with a single JSON object. No other text before or after.
+2. You must pick ONE tool to call per response.
 
 Available tools:
-- search_orders(customer_id: int) — search customer orders
-- search_docs(query: str) — search support documentation
-- get_customer(customer_id: int) — get customer details
-- process_refund(order_id: int, amount: float) — process a refund (requires approval)
-- delete_account(user_id: int) — delete account (requires multi-party approval)
-- send_reply(customer_id: int, message: str) — send reply to customer
+- search_orders: Search customer orders. Params: {"customer_id": <int>}
+- search_docs: Search support documentation. Params: {"query": "<string>"}
+- get_customer: Get customer details. Params: {"customer_id": <int>}
+- process_refund: Process a refund. Params: {"order_id": <int>, "amount": <float>}
+- delete_account: Delete a customer account. Params: {"user_id": <int>}
+- send_reply: Send a reply to the customer. Params: {"customer_id": <int>, "message": "<string>"}
 
-When you need to use a tool, respond with a JSON block:
-{"tool": "tool_name", "params": {"key": "value"}}
+DECISION GUIDELINES:
+- For questions about policies → use search_docs first, then send_reply with the answer.
+- For refund requests → use process_refund with the order_id and amount.
+- For account deletion requests → use delete_account with the user_id.
+- For order inquiries → use search_orders first.
+- When you already have the answer → use send_reply directly.
 
-For high-risk actions (refunds, deletions), state that you need approval.
-For simple queries, just answer directly.
-Keep responses concise."""
+RESPONSE FORMAT (strict JSON only):
+{"tool": "tool_name", "params": {"key": "value"}}"""
 
 
 class SupportAgent:
@@ -82,7 +89,7 @@ class SupportAgent:
         tools = ToolExecutor(self.writer, session_id=session_id)
 
         # Step 1: Ask LLM what to do
-        prompt = f'Customer #{customer_id} says: "{message}"\n\nDecide what to do. If you need a tool, respond with the JSON block.'
+        prompt = f'Customer #{customer_id} says: "{message}"\n\nPick the best tool to handle this request. Respond with ONLY a JSON object: {{"tool": "tool_name", "params": {{...}}}}'
         response = llm.chat(
             messages=[{"role": "user", "content": prompt}],
             system_prompt=SYSTEM_PROMPT,
@@ -127,7 +134,7 @@ class SupportAgent:
                     {"role": "model", "content": llm_text},
                     {
                         "role": "user",
-                        "content": f"Tool result: {json.dumps(result, default=str)}. Now respond to the customer.",
+                        "content": f"Tool result: {json.dumps(result, default=str)}\n\nNow use send_reply to respond to the customer with a helpful message based on this result. Respond with ONLY the JSON.",
                     },
                 ],
                 system_prompt=SYSTEM_PROMPT,

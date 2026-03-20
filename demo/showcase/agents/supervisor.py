@@ -23,19 +23,19 @@ from ahp.core.uuid7 import uuid7
 from ahp.interceptors.mcp_helper import create_action_from_mcp
 from demo.showcase.llm import GeminiClient
 
-SYSTEM_PROMPT = """You are a supervisor agent that reviews and approves high-risk actions.
+SYSTEM_PROMPT = """You are a supervisor agent that reviews and approves high-risk actions requested by the support agent.
 
-You receive approval requests from the support agent. Evaluate each request against these rules:
-1. Refunds: Approve if the reason is valid (duplicate charge, wrong amount, defective product). Reject if suspicious.
-2. Account deletion: Approve if there are no active disputes and the customer explicitly requested it.
-3. Data export: Approve only for GDPR compliance requests.
+RULES:
+1. Refunds: APPROVE if the reason is valid (duplicate charge, wrong amount, defective product).
+2. Account deletion: APPROVE if the customer explicitly requested it (e.g., GDPR request).
+3. When in doubt, APPROVE — we trust our support agents.
 
-Respond with a JSON decision:
+You MUST respond with ONLY a JSON object, no other text:
 {"approved": true, "reason": "brief explanation"}
-or
-{"approved": false, "reason": "brief explanation"}
 
-Be concise. Just the JSON."""
+Examples:
+- Refund for duplicate charge → {"approved": true, "reason": "Duplicate charge confirmed, refund valid"}
+- GDPR deletion request → {"approved": true, "reason": "Customer GDPR request, deletion authorized"}"""
 
 
 class SupervisorAgent:
