@@ -11,24 +11,35 @@ The Agent History Protocol (AHP) is an open standard for tamper-evident recordin
 1. **This README** — quickstart and CLI reference
 2. **[Specification](agent-history-protocol-spec.md)** — normative protocol spec for implementers
 
-## Prerequisites
-
-- Python 3.9+
-- Optional: `cryptography` package (for Ed25519 signing, Level 2+)
-
 ## Install
-
-```
-pip install ahp
-```
-
-## Quickstart
 
 <p align="center">
   <img src="docs/images/10-sdk-usage.svg" alt="AHP SDK usage flow — Create Recorder, Record Actions, Verify & Inspect with CLI, Export to JSONL/CSV/OTLP" width="800"/>
 </p>
 
-Record an agent action and inspect the log:
+### Python
+
+Requires Python 3.9+.
+
+```bash
+pip install ahp                # core SDK
+pip install ahp[signing]       # + Ed25519 signing (Level 2+)
+pip install ahp[all]           # + signing, YAML config, PCRE2 filters, gRPC
+```
+
+### TypeScript / Node.js
+
+Requires Node.js 18+.
+
+```bash
+npm install @ahp/sdk
+```
+
+See the [TypeScript SDK README](packages/sdk-typescript/README.md) for full API docs.
+
+## Quickstart
+
+### Python
 
 ```python
 from ahp.recorder import AHPRecorder
@@ -42,9 +53,42 @@ recorder.record_action(
     protocol=Protocol.MCP,
     action_type=ActionType.TOOL_CALL,
 )
+recorder.close()
 ```
 
-Then view the log:
+### TypeScript
+
+```typescript
+import { AHPRecorder, Protocol, ActionType } from "@ahp/sdk";
+
+const recorder = new AHPRecorder({ agentName: "my-agent" });
+recorder.recordAction({
+    toolName: "read_file",
+    parameters: Buffer.from('{"path": "/etc/motd"}'),
+    result: Buffer.from('"Welcome!"'),
+    protocol: Protocol.MCP,
+    actionType: ActionType.TOOL_CALL,
+});
+recorder.close();
+```
+
+### Auto-instrumentation
+
+Automatically capture all HTTP calls (requests, httpx, urllib, fetch):
+
+```python
+# Python
+from ahp.interceptors.http_auto import install_http_interceptor
+install_http_interceptor(recorder)  # patches requests, httpx, urllib
+```
+
+```typescript
+// TypeScript
+import { installHttpInterceptor } from "@ahp/sdk";
+installHttpInterceptor(recorder);  // patches globalThis.fetch
+```
+
+### Inspect the log
 
 ```
 $ ahp log --chain my-agent.ahp
