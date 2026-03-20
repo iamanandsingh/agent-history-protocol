@@ -8,14 +8,18 @@ from typing import Dict, Optional
 from urllib.request import Request, urlopen
 
 from ahp.core.chain import ChainWriter
-from ahp.core.records import Authorization, AuthorizationEntry, BootPayload
+from ahp.core.records import ActionPayload, Authorization, AuthorizationEntry, BootPayload
 from ahp.core.types import (
+    ActionType,
     AuthorizationDecision,
     AuthorizationType,
     AuthorizerType,
     ChainLevel,
+    Protocol,
+    ResultStatus,
 )
 from ahp.core.uuid7 import uuid7
+from ahp.interceptors.mcp_helper import _hash16
 from demo.showcase.llm import GeminiClient
 from demo.showcase.tools import ToolExecutor
 
@@ -119,7 +123,12 @@ class SupportAgent:
         params = tool_call["params"]
 
         # Step 3: Execute tool with appropriate authorization
-        if tool_name == "process_refund":
+        if tool_name == "send_reply":
+            # Direct reply — no further LLM call needed
+            reply = params.get("message", llm_text)
+            tools.run("send_reply", {"customer_id": customer_id, "message": reply})
+            return reply
+        elif tool_name == "process_refund":
             return self._handle_refund(llm, tools, customer_id, params, session_id)
         elif tool_name == "delete_account":
             return self._handle_deletion(llm, tools, customer_id, params, session_id)
@@ -140,8 +149,16 @@ class SupportAgent:
                 system_prompt=SYSTEM_PROMPT,
             )
 
-            reply = followup["text"] if not followup.get("error") else str(result)
+            followup_text = followup["text"] if not followup.get("error") else str(result)
             tools.set_parent(llm.last_record_id)
+
+            # Extract message from send_reply JSON if the LLM returned a tool call
+            followup_call = self._extract_tool_call(followup_text)
+            if followup_call and followup_call.get("tool") == "send_reply":
+                reply = followup_call["params"].get("message", followup_text)
+            else:
+                reply = followup_text
+
             tools.run("send_reply", {"customer_id": customer_id, "message": reply})
             return reply
 

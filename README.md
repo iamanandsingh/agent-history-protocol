@@ -6,6 +6,14 @@ The Agent History Protocol (AHP) is an open standard for tamper-evident recordin
   <img src="docs/images/01-architecture.svg" alt="AHP Architecture — Agent → Interceptors → PII Filters → AHPRecorder → Hash Chain + Evidence Store → Signing / Witness / Export" width="800"/>
 </p>
 
+## Demo
+
+<p align="center">
+  <img src="docs/images/ahp-demo.gif" alt="AHP Demo — Install, run multi-agent system with real LLM, inspect chain records, verify integrity" width="800"/>
+</p>
+
+> Install → Run 3 real AI agents with Gemini Flash → Inspect chain records (HTTP, MCP, A2A protocols) → Verify integrity & compliance
+
 ## Documents
 
 1. **This README** — quickstart and CLI reference

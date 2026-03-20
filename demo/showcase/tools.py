@@ -40,7 +40,7 @@ class ToolExecutor:
             result = {"error": str(e), "type": type(e).__name__}
             success = False
 
-        duration_ms = int((time.time() - start) * 1000)
+        duration_ms = max(1, int((time.time() - start) * 1000))
 
         action = create_action_from_mcp(
             tool_name=tool_name,

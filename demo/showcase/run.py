@@ -114,18 +114,19 @@ def log_chain(chain_path: str, agent_name: str) -> None:
         return
 
     print(f"  {agent_name} — {len(records)} records:")
-    print(f"  {'#':>4} | {'Type':10} | {'Tool':25} | {'Status':7} | {'Auth':22} | {'Time':>6}")
-    print(f"  {'─' * 85}")
+    print(f"  {'#':>4} | {'Type':10} | {'Proto':6} | {'Tool':25} | {'Status':7} | {'Auth':22} | {'Time':>6}")
+    print(f"  {'─' * 95}")
 
     for stored in records:
         s = format_action_summary(stored)
         seq = s["sequence"]
         rtype = s["type"]
+        proto = s["protocol"][:6]
         tool = s["tool_name"][:25]
         status = s["result_status"]
         auth = s["authorization"][:22]
-        ms = f"{s['response_time_ms']}ms" if s["response_time_ms"] else "—"
-        print(f"  {seq:>4} | {rtype:10} | {tool:25} | {status:7} | {auth:22} | {ms:>6}")
+        ms = f"{s['response_time_ms']}ms" if s["tool_name"] != "—" else "—"
+        print(f"  {seq:>4} | {rtype:10} | {proto:6} | {tool:25} | {status:7} | {auth:22} | {ms:>6}")
 
     print()
 
@@ -284,36 +285,12 @@ def main():
     print()
 
     # ═══════════════════════════════════════════════════════════
-    banner("TAMPER DETECTION")
-    # ═══════════════════════════════════════════════════════════
-
-    print("  An attacker modifies a record in the support-bot chain...")
-    print("  (changing a byte to hide what tool was called)\n")
-
-    # Find the first non-boot action record to tamper with
-    reader = ChainReader(SUPPORT_CHAIN)
-    records = reader.read_all()
-    target = 2  # First action after boot
-    if len(records) > 3:
-        target = 3
-
-    tamper_chain(SUPPORT_CHAIN, target_record=target)
-    print(f"  Record #{target} modified. CRC fixed (attacker is smart).\n")
-
-    print("  $ ahp verify\n")
-    verify_and_show(SUPPORT_CHAIN, "support-bot")
-    verify_and_show(SUPERVISOR_CHAIN, "supervisor-bot (untouched)")
-    print()
-    print("  The hash chain caught the tampering.")
-    print("  Supervisor's chain is independent — still intact.")
-
-    # ═══════════════════════════════════════════════════════════
     banner("COMPLIANCE SUMMARY")
     # ═══════════════════════════════════════════════════════════
 
-    # Re-read supervisor chain (untampered)
     reader_s = ChainReader(SUPERVISOR_CHAIN)
     records_s = reader_s.read_all()
+    records = ChainReader(SUPPORT_CHAIN).read_all()
 
     total_records = len(records) + len(records_s)
     inference_count = 0

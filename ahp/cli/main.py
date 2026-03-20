@@ -96,20 +96,23 @@ def cmd_log(
         return
 
     # Header
-    print(f"\n{'#':>4} | {'Time':8} | {'Type':10} | {'Tool/Name':25} | {'Status':7} | {'Auth':20} | {'Latency':>8}")
-    print("\u2500" * 95)
+    print(
+        f"\n{'#':>4} | {'Time':8} | {'Type':10} | {'Proto':6} | {'Tool/Name':25} | {'Status':7} | {'Auth':20} | {'Latency':>8}"
+    )
+    print("\u2500" * 105)
 
     for stored in all_bytes:
         summary = format_action_summary(stored)
         seq = summary["sequence"]
         ts = _ts(summary["timestamp_ms"])
         rtype = summary["type"]
+        proto = summary["protocol"][:6]
         tool = summary["tool_name"][:25]
         status = summary["result_status"]
         auth = summary["authorization"][:20]
-        latency = f"{summary['response_time_ms']}ms" if summary["response_time_ms"] else "\u2014"
+        latency = f"{summary['response_time_ms']}ms" if summary["tool_name"] != "—" else "—"
 
-        print(f"{seq:>4} | {ts:8} | {rtype:10} | {tool:25} | {status:7} | {auth:20} | {latency:>8}")
+        print(f"{seq:>4} | {ts:8} | {rtype:10} | {proto:6} | {tool:25} | {status:7} | {auth:20} | {latency:>8}")
 
     print(f"\n{len(all_bytes)} records displayed.\n")
 

@@ -37,7 +37,16 @@ def export_csv(chain_path: Union[str, Path], output_path: Union[str, Path]) -> i
     reader = ChainReader(chain_path)
     all_bytes = reader.read_all()
 
-    fieldnames = ["sequence", "timestamp_ms", "type", "tool_name", "result_status", "response_time_ms", "authorization"]
+    fieldnames = [
+        "sequence",
+        "timestamp_ms",
+        "type",
+        "protocol",
+        "tool_name",
+        "result_status",
+        "response_time_ms",
+        "authorization",
+    ]
     count = 0
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
