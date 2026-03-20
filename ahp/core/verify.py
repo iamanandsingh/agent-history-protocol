@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ahp.core.chain import ChainReader, parse_envelope, parse_gap_payload
-from ahp.core.types import ZERO_HASH_32, RecordType
+from ahp.core.types import SCHEMA_VERSION, ZERO_HASH_32, RecordType
 
 
 @dataclass
@@ -55,6 +55,16 @@ def verify_chain(path: str) -> VerifyResult:
         seq = envelope["sequence"]
         prev_hash = envelope["prev_hash"]
         record_type_val = envelope["record_type"]
+
+        # Validate schema version
+        if envelope["schema_version"] != SCHEMA_VERSION:
+            return VerifyResult(
+                valid=False,
+                records_checked=i + 1,
+                gaps=gaps,
+                broken_at=seq,
+                error=f"Unsupported schema version {envelope['schema_version']} at sequence {seq} (expected {SCHEMA_VERSION})",
+            )
 
         # Validate enum value
         try:

@@ -28,9 +28,10 @@ from ahp.interceptors.http_helper import create_action_from_http
 
 logger = logging.getLogger("ahp.interceptors.http_auto")
 
-# Module-level state for the monkey-patch.
+# Module-level state for the monkey-patch (guarded by _install_lock).
 _original_urlopen = None  # type: Optional[Any]
 _recorder = None  # type: Optional[Any]
+_install_lock = threading.Lock()
 
 # Per-thread reentrancy guard: prevents the witness client's own urllib calls
 # (made during AHP recording) from being intercepted and recorded again.
@@ -119,11 +120,12 @@ def install_http_interceptor(recorder: Any) -> None:
     """
     global _original_urlopen, _recorder
 
-    if _original_urlopen is not None:
-        return  # Already installed
+    with _install_lock:
+        if _original_urlopen is not None:
+            return  # Already installed
 
-    _original_urlopen = urllib.request.urlopen
-    _recorder = recorder
+        _original_urlopen = urllib.request.urlopen
+        _recorder = recorder
 
     def _intercepted_urlopen(
         url: Any,
@@ -259,7 +261,8 @@ def uninstall_http_interceptor() -> None:
     """Remove the HTTP interceptor and restore the original ``urlopen``."""
     global _original_urlopen, _recorder
 
-    if _original_urlopen is not None:
-        urllib.request.urlopen = _original_urlopen  # type: ignore[assignment]
-        _original_urlopen = None
-        _recorder = None
+    with _install_lock:
+        if _original_urlopen is not None:
+            urllib.request.urlopen = _original_urlopen  # type: ignore[assignment]
+            _original_urlopen = None
+            _recorder = None

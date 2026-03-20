@@ -40,8 +40,9 @@ RECEIPTS_FILE = os.environ.get(
 MAX_REQUEST_SIZE = 1_048_576  # 1 MB
 MAX_RECEIPTS = 10_000  # rotate storage file after this many receipts
 _receipts_lock = threading.Lock()
-# In-memory index for O(1) duplicate receipt lookup; keyed by (agent_id, sequence).
-_receipt_index: Dict[tuple, Dict] = {}
+# In-memory indexes for O(1) lookups.
+_receipt_index: Dict[tuple, Dict] = {}  # keyed by (agent_id, sequence) for dedup
+_receipt_by_id: Dict[str, Dict] = {}  # keyed by receipt_id for GET lookups
 
 
 def _load_receipts() -> Dict:
@@ -87,13 +88,15 @@ def _find_existing_receipt(agent_id: str, sequence: int) -> Optional[Dict]:
 
 def _init_receipt_index() -> None:
     """Build the in-memory dedup index from on-disk receipts (called at startup)."""
-    global _receipt_index
+    global _receipt_index, _receipt_by_id
     try:
         data = _load_receipts()
         _receipt_index = {(r.get("agent_id"), r.get("sequence")): r for r in data["receipts"]}
+        _receipt_by_id = {r["receipt_id"]: r for r in data["receipts"] if "receipt_id" in r}
     except Exception as e:
         logger.warning("Failed to initialize receipt index: %s", e)
         _receipt_index = {}
+        _receipt_by_id = {}
 
 
 _init_receipt_index()
@@ -234,10 +237,12 @@ class WitnessHandler(BaseHTTPRequestHandler):
                     _rotate_receipts_file()
                     data = {"receipts": []}
                     _receipt_index.clear()
+                    _receipt_by_id.clear()
 
                 data["receipts"].append(receipt)
                 _save_receipts(data)
                 _receipt_index[(agent_id, sequence)] = receipt
+                _receipt_by_id[receipt["receipt_id"]] = receipt
 
             response = json.dumps(receipt).encode()
             self.send_response(200)
@@ -272,17 +277,16 @@ class WitnessHandler(BaseHTTPRequestHandler):
             self.wfile.write(response)
         elif self.path.startswith("/ahp/v1/receipts/"):
             receipt_id = self.path.split("/")[-1]
-            data = _load_receipts()
-            for r in data["receipts"]:
-                if r["receipt_id"] == receipt_id:
-                    response = json.dumps(r).encode()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response)
-                    return
-            self.send_error(404)
+            receipt = _receipt_by_id.get(receipt_id)
+            if receipt is not None:
+                response = json.dumps(receipt).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+            else:
+                self.send_error(404)
         elif self.path.startswith("/ahp/v1/agents/"):
             parts = self.path.split("/")
             agent_id = parts[4] if len(parts) > 4 else ""

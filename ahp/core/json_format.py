@@ -30,6 +30,14 @@ from ahp.core.types import (
 from ahp.core.uuid7 import uuid7_to_str
 
 
+def _safe_enum_name(enum_cls, value, default: str = "UNKNOWN") -> str:
+    """Convert an integer to an enum name, returning a fallback for invalid values."""
+    try:
+        return enum_cls(value).name
+    except ValueError:
+        return f"{default}({value})"
+
+
 def record_to_json(stored_bytes: bytes) -> dict:
     """Convert canonical bytes to JSON-friendly dict per Appendix H."""
     env = parse_envelope(stored_bytes)
@@ -42,7 +50,7 @@ def record_to_json(stored_bytes: bytes) -> dict:
         "sequence": env["sequence"],
         "prev_hash": env["prev_hash"].hex() if env["prev_hash"] != b"\x00" * 32 else None,
         "schema_version": env["schema_version"],
-        "type": env["record_type"].name,
+        "type": _safe_enum_name(RecordType, env["record_type"]),
     }
 
     rtype = env["record_type"]
@@ -52,13 +60,15 @@ def record_to_json(stored_bytes: bytes) -> dict:
         auth_entries = []
         for e in payload["authorization"]["entries"]:
             entry = {
-                "authorizer_type": AuthorizerType(e["authorizer_type"]).name if e["authorizer_type"] else None,
+                "authorizer_type": _safe_enum_name(AuthorizerType, e["authorizer_type"])
+                if e["authorizer_type"]
+                else None,
                 "authorizer_id": e["authorizer_id"],
                 "authorizer_agent_id": uuid7_to_str(e["authorizer_agent_id"])
                 if e["authorizer_agent_id"] != ZERO_UUID
                 else None,
                 "authorizer_seq": e["authorizer_seq"] if e["authorizer_seq"] != 0 else None,
-                "decision": AuthorizationDecision(e["decision"]).name if e["decision"] else None,
+                "decision": _safe_enum_name(AuthorizationDecision, e["decision"]) if e["decision"] else None,
                 "condition": e["condition"] or None,
                 "timestamp_ms": e["timestamp_ms"],
             }
@@ -71,10 +81,10 @@ def record_to_json(stored_bytes: bytes) -> dict:
             "tool_name": payload["tool_name"],
             "parameters_hash": payload["parameters_hash"].hex(),
             "result_hash": payload["result_hash"].hex(),
-            "result_status": ResultStatus(payload["result_status"]).name,
+            "result_status": _safe_enum_name(ResultStatus, payload["result_status"]),
             "response_time_ms": payload["response_time_ms"],
-            "protocol": Protocol(payload["protocol"]).name,
-            "action_type": ActionType(payload["action_type"]).name,
+            "protocol": _safe_enum_name(Protocol, payload["protocol"]),
+            "action_type": _safe_enum_name(ActionType, payload["action_type"]),
             "target_entity": payload["target_entity"] or None,
             "evidence_uri": payload["evidence_uri"] or None,
             "redacted": payload["redacted"],
@@ -82,7 +92,7 @@ def record_to_json(stored_bytes: bytes) -> dict:
             "input_token_count": payload["input_token_count"],
             "output_token_count": payload["output_token_count"],
             "authorization": {
-                "type": AuthorizationType(payload["authorization"]["type"]).name,
+                "type": _safe_enum_name(AuthorizationType, payload["authorization"]["type"]),
                 "entries": auth_entries,
             },
         }
@@ -96,8 +106,8 @@ def record_to_json(stored_bytes: bytes) -> dict:
             "agent_framework": payload["agent_framework"] or None,
             "agent_name": payload["agent_name"],
             "runtime": payload["runtime"],
-            "chain_level": ChainLevel(payload["chain_level"]).name,
-            "fsync_mode": FsyncMode(payload["fsync_mode"]).name,
+            "chain_level": _safe_enum_name(ChainLevel, payload["chain_level"]),
+            "fsync_mode": _safe_enum_name(FsyncMode, payload["fsync_mode"]),
             "clock_source": payload["clock_source"] or None,
             "inference_recording": payload["inference_recording"],
             "inference_evidence": payload["inference_evidence"],
@@ -114,7 +124,7 @@ def record_to_json(stored_bytes: bytes) -> dict:
             "first_lost_sequence": payload["first_lost_sequence"],
             "last_lost_sequence": payload["last_lost_sequence"],
             "count": payload["count"],
-            "reason": GapReason(payload["reason"]).name,
+            "reason": _safe_enum_name(GapReason, payload["reason"]),
             "detail": payload["detail"] or None,
         }
 
@@ -139,7 +149,7 @@ def record_to_json(stored_bytes: bytes) -> dict:
             "records_verified": payload["records_verified"],
             "records_truncated": payload["records_truncated"],
             "last_valid_seq": payload["last_valid_seq"],
-            "recovery_method": RecoveryMethod(payload["recovery_method"]).name,
+            "recovery_method": _safe_enum_name(RecoveryMethod, payload["recovery_method"]),
             "detail": payload["detail"] or None,
         }
 
@@ -177,7 +187,7 @@ def format_action_summary(stored_bytes: bytes) -> dict:
         return {
             "sequence": env["sequence"],
             "timestamp_ms": env["timestamp_ms"],
-            "type": env["record_type"].name,
+            "type": _safe_enum_name(RecordType, env["record_type"]),
             "tool_name": "—",
             "result_status": "—",
             "response_time_ms": 0,
@@ -186,7 +196,11 @@ def format_action_summary(stored_bytes: bytes) -> dict:
         }
 
     payload = parse_action_payload(env["payload_bytes"])
-    auth_type = AuthorizationType(payload["authorization"]["type"])
+
+    try:
+        auth_type = AuthorizationType(payload["authorization"]["type"])
+    except ValueError:
+        auth_type = None
 
     # Build authorization display string
     if auth_type == AuthorizationType.AUTH_NONE:
@@ -211,9 +225,9 @@ def format_action_summary(stored_bytes: bytes) -> dict:
     return {
         "sequence": env["sequence"],
         "timestamp_ms": env["timestamp_ms"],
-        "type": ActionType(payload["action_type"]).name,
+        "type": _safe_enum_name(ActionType, payload["action_type"]),
         "tool_name": payload["tool_name"],
-        "result_status": ResultStatus(payload["result_status"]).name,
+        "result_status": _safe_enum_name(ResultStatus, payload["result_status"]),
         "response_time_ms": payload["response_time_ms"],
         "authorization": auth_display,
         "model_id": payload["model_id"],
