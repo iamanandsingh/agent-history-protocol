@@ -427,7 +427,9 @@ def parse_envelope(stored_bytes: bytes) -> dict:
         "sequence": sequence,
         "prev_hash": prev_hash,
         "schema_version": schema_version,
-        "record_type": RecordType(record_type_val),
+        "record_type": RecordType(record_type_val)
+        if record_type_val in RecordType._value2member_map_
+        else record_type_val,
         "payload_offset": offset,
         "payload_bytes": stored_bytes[offset:],
         "stored_bytes": stored_bytes,

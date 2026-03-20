@@ -103,13 +103,15 @@ export class ChainWriter {
       this._prevHash = new Uint8Array(prevHash);
     }
 
-    // Acquire advisory file lock (write a marker to .lock file)
+    // Acquire advisory file lock (exclusive create — fails if .lock exists)
     const lockPath = this.path + ".lock";
     try {
-      this._lockFd = fs.openSync(lockPath, "wx"); // exclusive create — fails if exists
+      this._lockFd = fs.openSync(lockPath, "wx");
     } catch {
-      // Lock file exists — another writer may be active.
-      // Warn but proceed (advisory lock, not mandatory).
+      throw new Error(
+        `Chain file '${this.path}' is locked by another process. ` +
+        `Only one ChainWriter per chain file is allowed.`
+      );
     }
 
     if (!fs.existsSync(path)) {

@@ -105,8 +105,14 @@ class FilterPipeline:
         self._param_filters = [f for f in self.filters if "parameters" in f.scope or "all" in f.scope]
         self._result_filters = [f for f in self.filters if "results" in f.scope or "all" in f.scope]
 
+    # Maximum payload size for regex filtering (1MB). Larger payloads are
+    # passed through unfiltered to prevent ReDoS on adversarial input.
+    MAX_FILTER_SIZE = 1_048_576
+
     def apply(self, payload: bytes, scope: str = "parameters") -> Tuple[bytes, bool]:
         """Apply all matching filters. Returns (filtered_bytes, was_redacted)."""
+        if len(payload) > self.MAX_FILTER_SIZE:
+            return payload, False  # Too large for safe regex processing
         try:
             text = payload.decode("utf-8")
         except UnicodeDecodeError:

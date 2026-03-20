@@ -219,6 +219,13 @@ class AHPRecorder(RecorderBase):
         )
         evidence_uri = self._store_evidence(filtered_params, filtered_result, param_hash)
 
+        # Apply PII filters to string fields that go directly into the chain
+        if target_entity and self._filters.filters:
+            filtered_te, te_redacted = self._filters.apply(target_entity.encode("utf-8"), scope="parameters")
+            target_entity = filtered_te.decode("utf-8")
+            if te_redacted:
+                redacted = True
+
         # Phase 2: Inside lock — state mutations only
         with self._recorder_lock:
             self._flush_pending_gap()

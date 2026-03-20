@@ -43,6 +43,7 @@ _receipts_lock = threading.Lock()
 # In-memory indexes for O(1) lookups.
 _receipt_index: Dict[tuple, Dict] = {}  # keyed by (agent_id, sequence) for dedup
 _receipt_by_id: Dict[str, Dict] = {}  # keyed by receipt_id for GET lookups
+_receipts_by_agent: Dict[str, list] = {}  # keyed by agent_id for GET /agents/{id}
 
 
 def _load_receipts() -> Dict:
@@ -69,6 +70,9 @@ def _save_receipts(data: Dict) -> None:
         raise
 
 
+MAX_ARCHIVE_FILES = 10  # keep at most this many rotated archive files
+
+
 def _rotate_receipts_file() -> None:
     """Rename the current receipts file to a timestamped archive and start fresh."""
     if os.path.exists(RECEIPTS_FILE):
@@ -80,6 +84,25 @@ def _rotate_receipts_file() -> None:
             logger.error("Failed to rotate receipts file: %s", e)
             raise
 
+    # Prune old archives beyond MAX_ARCHIVE_FILES
+    base = RECEIPTS_FILE.replace(".json", ".")
+    archives = sorted(
+        (
+            f
+            for f in Path(os.path.dirname(RECEIPTS_FILE) or ".").iterdir()
+            if f.name.startswith(os.path.basename(base))
+            and f.name.endswith(".json")
+            and f.name != os.path.basename(RECEIPTS_FILE)
+        ),
+    )
+    while len(archives) > MAX_ARCHIVE_FILES:
+        oldest = archives.pop(0)
+        try:
+            oldest.unlink()
+            logger.info("Pruned old receipt archive: %s", oldest.name)
+        except OSError:
+            pass
+
 
 def _find_existing_receipt(agent_id: str, sequence: int) -> Optional[Dict]:
     """O(1) duplicate (agent_id, sequence) lookup via in-memory index."""
@@ -88,15 +111,20 @@ def _find_existing_receipt(agent_id: str, sequence: int) -> Optional[Dict]:
 
 def _init_receipt_index() -> None:
     """Build the in-memory dedup index from on-disk receipts (called at startup)."""
-    global _receipt_index, _receipt_by_id
+    global _receipt_index, _receipt_by_id, _receipts_by_agent
     try:
         data = _load_receipts()
         _receipt_index = {(r.get("agent_id"), r.get("sequence")): r for r in data["receipts"]}
         _receipt_by_id = {r["receipt_id"]: r for r in data["receipts"] if "receipt_id" in r}
+        _receipts_by_agent = {}
+        for r in data["receipts"]:
+            aid = r.get("agent_id", "")
+            _receipts_by_agent.setdefault(aid, []).append(r)
     except Exception as e:
         logger.warning("Failed to initialize receipt index: %s", e)
         _receipt_index = {}
         _receipt_by_id = {}
+        _receipts_by_agent = {}
 
 
 _init_receipt_index()
@@ -238,11 +266,13 @@ class WitnessHandler(BaseHTTPRequestHandler):
                     data = {"receipts": []}
                     _receipt_index.clear()
                     _receipt_by_id.clear()
+                    _receipts_by_agent.clear()
 
                 data["receipts"].append(receipt)
                 _save_receipts(data)
                 _receipt_index[(agent_id, sequence)] = receipt
                 _receipt_by_id[receipt["receipt_id"]] = receipt
+                _receipts_by_agent.setdefault(agent_id, []).append(receipt)
 
             response = json.dumps(receipt).encode()
             self.send_response(200)
@@ -290,8 +320,7 @@ class WitnessHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/ahp/v1/agents/"):
             parts = self.path.split("/")
             agent_id = parts[4] if len(parts) > 4 else ""
-            data = _load_receipts()
-            agent_receipts = [r for r in data["receipts"] if r.get("agent_id") == agent_id]
+            agent_receipts = _receipts_by_agent.get(agent_id, [])
             response = json.dumps(agent_receipts).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

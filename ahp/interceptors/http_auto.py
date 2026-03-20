@@ -253,8 +253,9 @@ def install_http_interceptor(recorder: Any) -> None:
 
         return wrapped
 
-    # Perform the actual monkey-patch.
-    urllib.request.urlopen = _intercepted_urlopen  # type: ignore[assignment]
+    # Perform the actual monkey-patch (under lock to prevent concurrent install race).
+    with _install_lock:
+        urllib.request.urlopen = _intercepted_urlopen  # type: ignore[assignment]
 
 
 def uninstall_http_interceptor() -> None:
