@@ -10,8 +10,8 @@
  * - Direct `http.request` / `https.request` (stdlib)
  *
  * Usage:
- *   import { AHPRecorder } from "@ahp/sdk";
- *   import { installHttpInterceptor, uninstallHttpInterceptor } from "@ahp/sdk/http-interceptor";
+ *   import { AHPRecorder } from "ahp-sdk";
+ *   import { installHttpInterceptor, uninstallHttpInterceptor } from "ahp-sdk/http-interceptor";
  *
  *   const recorder = new AHPRecorder({ agentName: "my-agent" });
  *   installHttpInterceptor(recorder);

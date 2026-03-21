@@ -1,17 +1,17 @@
-# @ahp/sdk — Agent History Protocol TypeScript SDK
+# ahp-sdk — Agent History Protocol TypeScript SDK
 
 TypeScript/Node.js implementation of the [Agent History Protocol](../../README.md), producing byte-for-byte identical canonical serialization as the Python SDK.
 
 ## Install
 
 ```
-npm install @ahp/sdk
+npm install ahp-sdk
 ```
 
 ## Quickstart
 
 ```typescript
-import { AHPRecorder, Protocol, ActionType } from "@ahp/sdk";
+import { AHPRecorder, Protocol, ActionType } from "ahp-sdk";
 
 const recorder = new AHPRecorder({ agentName: "my-agent" });
 
@@ -29,7 +29,7 @@ recorder.close();
 ## Chain Verification
 
 ```typescript
-import { ChainReader, crc32 } from "@ahp/sdk";
+import { ChainReader, crc32 } from "ahp-sdk";
 import * as crypto from "crypto";
 
 const reader = new ChainReader("my-agent.ahp");

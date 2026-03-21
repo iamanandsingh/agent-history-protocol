@@ -40,7 +40,7 @@ pip install ahp-sdk[all]           # + signing, YAML config, PCRE2 filters, gRPC
 Requires Node.js 18+.
 
 ```bash
-npm install @ahp/sdk
+npm install ahp-sdk
 ```
 
 See the [TypeScript SDK README](packages/sdk-typescript/README.md) for full API docs.
@@ -67,7 +67,7 @@ recorder.close()
 ### TypeScript
 
 ```typescript
-import { AHPRecorder, Protocol, ActionType } from "@ahp/sdk";
+import { AHPRecorder, Protocol, ActionType } from "ahp-sdk";
 
 const recorder = new AHPRecorder({ agentName: "my-agent" });
 recorder.recordAction({
@@ -92,7 +92,7 @@ install_http_interceptor(recorder)  # patches requests, httpx, urllib
 
 ```typescript
 // TypeScript
-import { installHttpInterceptor } from "@ahp/sdk";
+import { installHttpInterceptor } from "ahp-sdk";
 installHttpInterceptor(recorder);  // patches globalThis.fetch
 ```
 

@@ -1,5 +1,5 @@
 {
-  "name": "@ahp/sdk",
+  "name": "ahp-sdk",
   "version": "0.1.0",
   "description": "Agent History Protocol — TypeScript SDK",
   "main": "dist/index.js",
