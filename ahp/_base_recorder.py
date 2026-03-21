@@ -40,7 +40,7 @@ logger = logging.getLogger("ahp.recorder")
 # SDK identity constants
 SDK_NAME = "ahp-python"
 try:
-    SDK_VERSION = importlib.metadata.version("ahp-sdk")
+    SDK_VERSION = importlib.metadata.version("open-ahp")
 except importlib.metadata.PackageNotFoundError:
     SDK_VERSION = "0.1.0"
 

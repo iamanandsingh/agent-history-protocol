@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ahp-sdk"
+name = "open-ahp"
 version = "0.1.0"
 description = "Agent History Protocol — tamper-evident recording for AI agents"
 readme = "README.md"
