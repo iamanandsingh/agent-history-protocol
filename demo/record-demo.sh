@@ -31,8 +31,8 @@ echo -e "${BOLD}  PART 1: Installation${RESET}"
 echo -e "${BOLD}═══════════════════════════════════════════════════════════════${RESET}"
 sleep 1
 
-step "Install AHP SDK with all extras (signing, filters, config)" \
-     "pip3 install -e '.[all]' -q 2>&1 | tail -1"
+step "Install AHP SDK" \
+     "pip3 install open-ahp 2>&1 | tail -1"
 
 step "Verify installation" \
      "python3 -c \"import ahp; print(f'AHP SDK v{ahp.__version__} installed successfully')\""
