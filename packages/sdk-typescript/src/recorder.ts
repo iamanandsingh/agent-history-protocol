@@ -5,7 +5,7 @@
  * crash recovery into one automated flow.
  *
  * Usage:
- *   import { AHPRecorder } from "ahp-sdk";
+ *   import { AHPRecorder } from "open-ahp";
  *
  *   const recorder = new AHPRecorder({ agentName: "my-agent" });
  *

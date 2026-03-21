@@ -5,13 +5,13 @@ TypeScript/Node.js implementation of the [Agent History Protocol](../../README.m
 ## Install
 
 ```
-npm install ahp-sdk
+npm install open-ahp
 ```
 
 ## Quickstart
 
 ```typescript
-import { AHPRecorder, Protocol, ActionType } from "ahp-sdk";
+import { AHPRecorder, Protocol, ActionType } from "open-ahp";
 
 const recorder = new AHPRecorder({ agentName: "my-agent" });
 
@@ -29,7 +29,7 @@ recorder.close();
 ## Chain Verification
 
 ```typescript
-import { ChainReader, crc32 } from "ahp-sdk";
+import { ChainReader, crc32 } from "open-ahp";
 import * as crypto from "crypto";
 
 const reader = new ChainReader("my-agent.ahp");
