@@ -91,7 +91,7 @@ class CheckpointPayload:
 @dataclass
 class BootPayload:
     sdk_name: str = "ahp-python"
-    sdk_version: str = "0.1.0a1"
+    sdk_version: str = "0.1.0"
     interceptors: list[str] = field(default_factory=list)
     agent_framework: str = ""
     agent_name: str = ""

@@ -40,9 +40,9 @@ logger = logging.getLogger("ahp.recorder")
 # SDK identity constants
 SDK_NAME = "ahp-python"
 try:
-    SDK_VERSION = importlib.metadata.version("ahp")
+    SDK_VERSION = importlib.metadata.version("ahp-sdk")
 except importlib.metadata.PackageNotFoundError:
-    SDK_VERSION = "0.1.0a1"
+    SDK_VERSION = "0.1.0"
 
 # Map string fsync modes from config to enum values
 FSYNC_MAP = {

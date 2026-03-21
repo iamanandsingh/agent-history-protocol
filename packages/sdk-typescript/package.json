@@ -1,6 +1,6 @@
 {
   "name": "@ahp/sdk",
-  "version": "0.1.0-alpha",
+  "version": "0.1.0",
   "description": "Agent History Protocol — TypeScript SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

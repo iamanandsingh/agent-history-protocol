@@ -30,9 +30,9 @@ The Agent History Protocol (AHP) is an open standard for tamper-evident recordin
 Requires Python 3.9+.
 
 ```bash
-pip install ahp                # core SDK
-pip install ahp[signing]       # + Ed25519 signing (Level 2+)
-pip install ahp[all]           # + signing, YAML config, PCRE2 filters, gRPC
+pip install ahp-sdk                # core SDK
+pip install ahp-sdk[signing]       # + Ed25519 signing (Level 2+)
+pip install ahp-sdk[all]           # + signing, YAML config, PCRE2 filters, gRPC
 ```
 
 ### TypeScript / Node.js
