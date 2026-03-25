@@ -27,7 +27,7 @@ from ahp.core.verify import verify_chain
 
 def run_async(coro):
     """Helper to run async test in sync unittest."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 class TestAsyncChainWriter(unittest.TestCase):

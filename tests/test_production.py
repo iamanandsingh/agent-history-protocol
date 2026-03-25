@@ -77,7 +77,7 @@ class TestSustainedLoad(unittest.TestCase):
             await writer.stop()
             return time.time() - start
 
-        elapsed = asyncio.get_event_loop().run_until_complete(_run())
+        elapsed = asyncio.run(_run())
 
         result = verify_chain(path)
         self.assertTrue(result.valid)
@@ -129,7 +129,7 @@ class TestSustainedLoad(unittest.TestCase):
             await asyncio.gather(*[batch(t) for t in range(50)])
             await writer.stop()
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
 
         result = verify_chain(path)
         self.assertTrue(result.valid)
@@ -361,7 +361,7 @@ class TestBackpressure(unittest.TestCase):
             await writer.stop()
             return writer.record_count
 
-        count = asyncio.get_event_loop().run_until_complete(_run())
+        count = asyncio.run(_run())
         self.assertEqual(count, 50)
 
         result = verify_chain(path)
