@@ -9,7 +9,7 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
 
-import { MAX_RECORD_SIZE } from "./validation";
+import { MAX_RECORD_SIZE, validateRecord } from "./validation";
 import {
   Record,
   RecordType,
@@ -147,7 +147,7 @@ export class ChainWriter {
   ): Record {
     this._sequence += 1n;
 
-    const record: Record = {
+    let record: Record = {
       record_id: uuid7(),
       agent_id: this.agentId,
       session_id: sessionId ?? this.sessionId,
@@ -158,6 +158,31 @@ export class ChainWriter {
       record_type: PAYLOAD_TYPE_MAP[payload.kind],
       payload,
     };
+
+    // Validate record before serialization (fail-open: emit GapRecord on error)
+    // Skip validation for replacement GapRecords to prevent infinite recursion
+    const isGapReplacement =
+      record.payload.kind === "gap" &&
+      record.payload.detail.startsWith("Validation failed:");
+    if (!isGapReplacement) {
+      const validation = validateRecord(record);
+      if (!validation.valid) {
+        const errorMsg = validation.errors
+          .map((e) => `${e.field}: ${e.message}`)
+          .join("; ");
+        record = {
+          ...record,
+          record_type: RecordType.GAP,
+          payload: createGapPayload({
+            first_lost_sequence: this._sequence,
+            last_lost_sequence: this._sequence,
+            count: 1n,
+            reason: GapReason.INTERCEPTOR_FAILURE,
+            detail: "Validation failed: " + errorMsg,
+          }),
+        };
+      }
+    }
 
     // Serialize to canonical bytes
     const stored = canonicalBytes(record);

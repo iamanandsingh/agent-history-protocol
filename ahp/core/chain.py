@@ -222,7 +222,7 @@ class ChainWriter:
             record_id=uuid7(),
             agent_id=self.agent_id,
             session_id=session_id or self.session_id,
-            timestamp_ms=timestamp_ms or int(time.time() * 1000),
+            timestamp_ms=int(time.time() * 1000) if timestamp_ms is None else timestamp_ms,
             sequence=self._sequence,
             prev_hash=self._prev_hash,
             schema_version=SCHEMA_VERSION,
@@ -354,7 +354,7 @@ class ChainReader:
                     break
                 length = struct.unpack("<I", length_bytes)[0]
                 if length > MAX_RECORD_SIZE:
-                    raise ValueError(f"Record length {length} exceeds maximum of 1MB")
+                    break
                 stored = f.read(length)
                 if len(stored) < length:
                     break

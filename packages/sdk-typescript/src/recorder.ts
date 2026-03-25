@@ -165,9 +165,10 @@ export class AHPRecorder {
     this._maxSegmentBytes = DEFAULT_MAX_SEGMENT_BYTES;
 
     // Chain writer (with recovery)
+    const safeAgentName = agentName.replace(/[^a-zA-Z0-9_-]/g, "_");
     this._chainPath =
       chainPath ||
-      path.join(os.tmpdir(), `ahp_${agentName}.ahp`);
+      path.join(os.tmpdir(), `ahp_${safeAgentName}.ahp`);
 
     // Recovery: if chain file already exists, scan and truncate corrupt tail
     if (fs.existsSync(this._chainPath)) {
