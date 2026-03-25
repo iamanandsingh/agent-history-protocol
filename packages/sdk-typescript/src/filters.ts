@@ -143,7 +143,11 @@ export class FilterPipeline {
       for (const presetName of presets) {
         const presetFilters = PRESETS[presetName];
         if (presetFilters) {
-          this.filters.push(...presetFilters);
+          // Clone each Filter so this pipeline has its own regex instances
+          // and stateful lastIndex does not leak between pipelines.
+          this.filters.push(
+            ...presetFilters.map(f => new Filter(f.name, f.pattern, f.replacement, [...f.scope]))
+          );
         }
       }
     }

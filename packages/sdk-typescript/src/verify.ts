@@ -24,12 +24,24 @@ export interface VerifyResult {
   error?: string;
 }
 
+export interface VerifyChainOptions {
+  /**
+   * When true, skip the genesis zero-hash check and the seq=1 requirement
+   * for the first record.  Use this when verifying a rotated segment file
+   * whose first record continues from a previous segment (i.e. prev_hash is
+   * the hash of the last record in the prior segment and the sequence does
+   * not start at 1).
+   */
+  allowNonzeroStart?: boolean;
+}
+
 /**
  * Verify hash chain integrity per Section 5.4.
  * Streams records one at a time from the chain file to avoid loading
  * the entire chain into memory.
  */
-export function verifyChain(path: string): VerifyResult {
+export function verifyChain(path: string, options?: VerifyChainOptions): VerifyResult {
+  const allowNonzeroStart = options?.allowNonzeroStart ?? false;
   const reader = new ChainReader(path);
 
   let expectedSeq = 1n;
@@ -45,7 +57,10 @@ export function verifyChain(path: string): VerifyResult {
 
     // Check hash chain
     if (i === 0) {
-      if (!uint8ArrayEquals(prevHash, ZERO_HASH_32)) {
+      if (allowNonzeroStart) {
+        // Rotated segment: accept any prev_hash and any starting sequence.
+        expectedSeq = seq;
+      } else if (!uint8ArrayEquals(prevHash, ZERO_HASH_32)) {
         return {
           valid: false,
           records_checked: i + 1,
