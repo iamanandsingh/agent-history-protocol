@@ -22,7 +22,7 @@ class VerifyResult:
     error: Optional[str] = None
 
 
-def verify_chain(path: str) -> VerifyResult:
+def verify_chain(path: str, *, allow_nonzero_start: bool = False) -> VerifyResult:
     """Verify hash chain integrity per Section 5.4.
 
     Uses streaming iteration (iter_records) to avoid loading the entire
@@ -33,6 +33,14 @@ def verify_chain(path: str) -> VerifyResult:
     2. Each subsequent record's prev_hash == SHA-256(stored_bytes of previous)
     3. Sequence numbers are monotonic with no gaps (except GapRecords)
     4. GapRecord constraints (first_lost_sequence, last_lost_sequence, count)
+
+    Args:
+        path: Path to the chain file.
+        allow_nonzero_start: When True, skip the genesis zero-hash check and
+            the seq=1 requirement for the first record.  Set this when
+            verifying a *rotated segment* file whose first record continues
+            from a previous segment (i.e. prev_hash is the hash of the last
+            record in the prior segment and the sequence does not start at 1).
     """
     reader = ChainReader(path)
 
@@ -80,7 +88,10 @@ def verify_chain(path: str) -> VerifyResult:
 
         # Check hash chain
         if i == 0:
-            if not hmac.compare_digest(prev_hash, ZERO_HASH_32):
+            if allow_nonzero_start:
+                # Rotated segment: accept any prev_hash and any starting sequence.
+                expected_seq = seq
+            elif not hmac.compare_digest(prev_hash, ZERO_HASH_32):
                 return VerifyResult(
                     valid=False,
                     records_checked=i + 1,

@@ -92,7 +92,8 @@ export class ChainWriter {
     fsyncMode: string = "batch",
     fsyncBatchSize: number = 1000,
     prevHash?: Uint8Array,
-    startSequence: bigint = 0n
+    startSequence: bigint = 0n,
+    staleLockThresholdMs: number = 60_000
   ) {
     this.path = path;
     this.agentId = agentId ?? uuid7();
@@ -104,16 +105,60 @@ export class ChainWriter {
       this._prevHash = new Uint8Array(prevHash);
     }
 
-    // Acquire advisory file lock (exclusive create — fails if .lock exists)
+    // Acquire advisory file lock (exclusive create — fails if .lock exists).
+    // If the existing lock file is stale (PID gone or file too old), remove it
+    // first so that crashed writers do not permanently block the chain file.
     const lockPath = this.path + ".lock";
-    try {
-      this._lockFd = fs.openSync(lockPath, "wx");
-    } catch {
+    const _tryRemoveStaleLock = (): boolean => {
+      try {
+        const stat = fs.statSync(lockPath);
+        const ageMs = Date.now() - stat.mtimeMs;
+        if (ageMs > staleLockThresholdMs) {
+          fs.unlinkSync(lockPath);
+          return true;
+        }
+        // Check whether the PID stored in the lock file is still alive
+        const contents = fs.readFileSync(lockPath, "utf8").trim();
+        const pid = parseInt(contents, 10);
+        if (!isNaN(pid) && pid > 0) {
+          try {
+            process.kill(pid, 0); // throws if process does not exist
+          } catch {
+            // Process is gone — lock is stale
+            fs.unlinkSync(lockPath);
+            return true;
+          }
+        }
+      } catch {
+        // Lock file already gone or unreadable — treat as cleared
+        return true;
+      }
+      return false;
+    };
+
+    let lockAcquired = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        this._lockFd = fs.openSync(lockPath, "wx");
+        lockAcquired = true;
+        break;
+      } catch {
+        if (attempt === 0 && _tryRemoveStaleLock()) {
+          continue; // retry once after removing stale lock
+        }
+        break;
+      }
+    }
+
+    if (!lockAcquired) {
       throw new Error(
         `Chain file '${this.path}' is locked by another process. ` +
         `Only one ChainWriter per chain file is allowed.`
       );
     }
+
+    // Write current PID into the lock file so stale-lock detection can check it
+    fs.writeSync(this._lockFd!, Buffer.from(String(process.pid)));
 
     if (!fs.existsSync(path)) {
       this._writeHeader();

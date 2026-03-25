@@ -11,7 +11,7 @@
  *
  * Usage:
  *   import { AHPRecorder } from "open-ahp";
- *   import { installHttpInterceptor, uninstallHttpInterceptor } from "ahp-sdk/http-interceptor";
+ *   import { installHttpInterceptor, uninstallHttpInterceptor } from "open-ahp/http-interceptor";
  *
  *   const recorder = new AHPRecorder({ agentName: "my-agent" });
  *   installHttpInterceptor(recorder);
@@ -176,6 +176,17 @@ export function installHttpInterceptor(recorder: AHPRecorder): void {
           requestBody = init.body;
         } else if (init.body instanceof ArrayBuffer || init.body instanceof SharedArrayBuffer) {
           requestBody = new Uint8Array(init.body as ArrayBuffer);
+        } else {
+          const bodyType =
+            init.body instanceof ReadableStream ? "ReadableStream" :
+            init.body instanceof Blob ? "Blob" :
+            init.body instanceof FormData ? "FormData" :
+            init.body instanceof URLSearchParams ? "URLSearchParams" :
+            typeof init.body;
+          console.warn(
+            `[open-ahp] HTTP interceptor: request body of type '${bodyType}' cannot be captured — ` +
+            `evidence will be incomplete for this request to ${url}`
+          );
         }
       }
 
