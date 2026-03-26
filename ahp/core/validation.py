@@ -85,13 +85,13 @@ def validate_record(record: Record) -> List[str]:
 def _validate_action(p: ActionPayload) -> List[str]:
     errors = []  # type: List[str]
 
-    if len(p.tool_name.encode('utf-8')) > MAX_TOOL_NAME_LENGTH:
+    if len(p.tool_name.encode("utf-8")) > MAX_TOOL_NAME_LENGTH:
         errors.append(f"tool_name too long: {len(p.tool_name.encode('utf-8'))} > {MAX_TOOL_NAME_LENGTH}")
-    if len(p.target_entity.encode('utf-8')) > MAX_STRING_LENGTH:
+    if len(p.target_entity.encode("utf-8")) > MAX_STRING_LENGTH:
         errors.append(f"target_entity too long: {len(p.target_entity.encode('utf-8'))}")
-    if len(p.evidence_uri.encode('utf-8')) > MAX_STRING_LENGTH:
+    if len(p.evidence_uri.encode("utf-8")) > MAX_STRING_LENGTH:
         errors.append(f"evidence_uri too long: {len(p.evidence_uri.encode('utf-8'))}")
-    if len(p.model_id.encode('utf-8')) > MAX_TOOL_NAME_LENGTH:
+    if len(p.model_id.encode("utf-8")) > MAX_TOOL_NAME_LENGTH:
         errors.append(f"model_id too long: {len(p.model_id.encode('utf-8'))}")
     if len(p.parameters_hash) != 16:
         errors.append(f"parameters_hash must be 16 bytes, got {len(p.parameters_hash)}")

@@ -97,7 +97,9 @@ jobs:
           pip install pip-audit
 
       - name: Run pip-audit
-        run: pip-audit
+        # CVE-2026-4539 / GHSA-5239-wwwm-4pmq: pygments vulnerability with no fix
+        # version available yet (transitive dep of pip-audit's own rich dependency).
+        run: pip-audit --ignore-vuln CVE-2026-4539 --ignore-vuln GHSA-5239-wwwm-4pmq
 
   test-typescript:
     runs-on: ubuntu-latest
