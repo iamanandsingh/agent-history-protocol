@@ -203,6 +203,11 @@ class AHPRecorder(RecorderBase):
         model_id: str = "",
         input_token_count: int = 0,
         output_token_count: int = 0,
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        cost_nano_usd: Optional[int] = None,
+        provider: str = "",
     ) -> Record:
         """Record a single agent action.
 
@@ -213,6 +218,14 @@ class AHPRecorder(RecorderBase):
 
         Returns the :class:`Record` written to the chain.
         """
+        # Auto-estimate cost if not provided and we have model + tokens
+        if cost_nano_usd is None and model_id and (input_token_count > 0 or output_token_count > 0):
+            from ahp.core.pricing import estimate_cost_nano
+
+            cost_nano_usd = estimate_cost_nano(model_id, input_token_count, output_token_count)
+        if cost_nano_usd is None:
+            cost_nano_usd = 0
+
         # Phase 1: Outside lock — pure computation + idempotent I/O
         param_hash, result_hash, filtered_params, filtered_result, redacted = self._filter_action_payloads(
             parameters, result
@@ -245,6 +258,11 @@ class AHPRecorder(RecorderBase):
                 model_id=model_id,
                 input_token_count=input_token_count,
                 output_token_count=output_token_count,
+                cache_read_tokens=cache_read_tokens,
+                cache_creation_tokens=cache_creation_tokens,
+                reasoning_tokens=reasoning_tokens,
+                cost_nano_usd=cost_nano_usd,
+                provider=provider,
                 authorization=authorization or Authorization(type=AuthorizationType.AUTH_NONE),
             )
 
@@ -269,6 +287,11 @@ class AHPRecorder(RecorderBase):
         model_id: str = "",
         input_token_count: int = 0,
         output_token_count: int = 0,
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        cost_nano_usd: Optional[int] = None,
+        provider: str = "",
         protocol: Protocol = Protocol.CUSTOM,
         result_status: ResultStatus = ResultStatus.SUCCESS,
         response_time_ms: int = 0,
@@ -295,6 +318,11 @@ class AHPRecorder(RecorderBase):
             model_id=model_id,
             input_token_count=input_token_count,
             output_token_count=output_token_count,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cost_nano_usd=cost_nano_usd,
+            provider=provider,
         )
 
     # ------------------------------------------------------------------

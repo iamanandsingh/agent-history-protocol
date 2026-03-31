@@ -151,17 +151,22 @@ function serializeAction(buf: BufferWriter, p: ActionPayload): void {
   buf.writeString(p.model_id);                     // tag 12
   buf.writeUint32(p.input_token_count);            // tag 13
   buf.writeUint32(p.output_token_count);           // tag 14
-  // tag 15: Authorization (nested, inline)
-  buf.writeUint32(p.authorization.type);           // tag 15.1: enum
-  buf.writeUint32(p.authorization.entries.length);  // tag 15.2: count
+  buf.writeUint32(p.cache_read_tokens);            // tag 15
+  buf.writeUint32(p.cache_creation_tokens);        // tag 16
+  buf.writeUint32(p.reasoning_tokens);             // tag 17
+  buf.writeUint64(BigInt(p.cost_nano_usd));    // tag 18
+  buf.writeString(p.provider);                     // tag 18
+  // tag 19: Authorization (nested, inline)
+  buf.writeUint32(p.authorization.type);           // tag 19.1: enum
+  buf.writeUint32(p.authorization.entries.length);  // tag 19.2: count
   for (const entry of p.authorization.entries) {
-    buf.writeUint32(entry.authorizer_type);         // tag 15.2.1: enum
-    buf.writeString(entry.authorizer_id);           // tag 15.2.2
-    buf.writeBytes(entry.authorizer_agent_id);      // tag 15.2.3: 16 bytes UUID
-    buf.writeUint64(entry.authorizer_seq);          // tag 15.2.4
-    buf.writeUint32(entry.decision);                // tag 15.2.5: enum
-    buf.writeString(entry.condition);               // tag 15.2.6
-    buf.writeUint64(entry.timestamp_ms);            // tag 15.2.7
+    buf.writeUint32(entry.authorizer_type);         // tag 19.2.1: enum
+    buf.writeString(entry.authorizer_id);           // tag 19.2.2
+    buf.writeBytes(entry.authorizer_agent_id);      // tag 19.2.3: 16 bytes UUID
+    buf.writeUint64(entry.authorizer_seq);          // tag 19.2.4
+    buf.writeUint32(entry.decision);                // tag 19.2.5: enum
+    buf.writeString(entry.condition);               // tag 19.2.6
+    buf.writeUint64(entry.timestamp_ms);            // tag 19.2.7
   }
 }
 
@@ -341,6 +346,11 @@ export function parseActionPayload(payloadBytes: Uint8Array): {
   model_id: string;
   input_token_count: number;
   output_token_count: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  reasoning_tokens: number;
+  cost_nano_usd: number;
+  provider: string;
   authorization: {
     type: number;
     entries: Array<{
@@ -389,6 +399,16 @@ export function parseActionPayload(payloadBytes: Uint8Array): {
   offset += 4;
   const output_token_count = view.getUint32(offset, true);
   offset += 4;
+  const cache_read_tokens = view.getUint32(offset, true);
+  offset += 4;
+  const cache_creation_tokens = view.getUint32(offset, true);
+  offset += 4;
+  const reasoning_tokens = view.getUint32(offset, true);
+  offset += 4;
+  const cost_nano_usd = Number(view.getBigUint64(offset, true));
+  offset += 8;
+  const [provider, off5b] = readString(payloadBytes, offset);
+  offset = off5b;
 
   // Authorization (nested)
   const auth_type = view.getUint32(offset, true);
@@ -447,6 +467,11 @@ export function parseActionPayload(payloadBytes: Uint8Array): {
     model_id,
     input_token_count,
     output_token_count,
+    cache_read_tokens,
+    cache_creation_tokens,
+    reasoning_tokens,
+    cost_nano_usd,
+    provider,
     authorization: { type: auth_type, entries },
   };
 }

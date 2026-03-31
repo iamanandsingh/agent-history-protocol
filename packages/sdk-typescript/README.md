@@ -23,6 +23,18 @@ recorder.recordAction({
   actionType: ActionType.TOOL_CALL,
 });
 
+// Record an LLM inference with token tracking
+recorder.recordInference({
+  toolName: "openai.chat.completions",
+  modelId: "gpt-4o",
+  inputTokenCount: 1200,
+  outputTokenCount: 340,
+  reasoningTokens: 512,
+  cacheReadTokens: 800,
+  costNanoUsd: 8000000,  // $0.008 in nano USD
+  provider: "openai",
+});
+
 recorder.close();
 ```
 

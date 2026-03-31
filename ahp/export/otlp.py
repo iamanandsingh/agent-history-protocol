@@ -57,6 +57,20 @@ def map_record_to_otlp_log(record_json: dict) -> dict:
         )
         if p.get("model_id"):
             attributes.append({"key": "ahp.inference.model", "value": {"stringValue": p["model_id"]}})
+        if p.get("provider"):
+            attributes.append({"key": "ahp.inference.provider", "value": {"stringValue": p["provider"]}})
+        if p.get("cache_read_tokens"):
+            attributes.append(
+                {"key": "ahp.usage.cache_read_tokens", "value": {"intValue": str(p["cache_read_tokens"])}}
+            )
+        if p.get("cache_creation_tokens"):
+            attributes.append(
+                {"key": "ahp.usage.cache_creation_tokens", "value": {"intValue": str(p["cache_creation_tokens"])}}
+            )
+        if p.get("reasoning_tokens"):
+            attributes.append({"key": "ahp.usage.reasoning_tokens", "value": {"intValue": str(p["reasoning_tokens"])}})
+        if p.get("cost_nano_usd"):
+            attributes.append({"key": "ahp.usage.cost_nano_usd", "value": {"intValue": str(p["cost_nano_usd"])}})
 
     return {
         "timeUnixNano": str(record_json["timestamp_ms"] * 1_000_000),

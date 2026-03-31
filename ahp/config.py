@@ -40,6 +40,20 @@ class WitnessConfig:
 
 
 @dataclass
+class PricingEntry:
+    model: str  # prefix to match (e.g. "gpt-4o", "claude-sonnet-4")
+    input: int  # nano USD per input token
+    output: int  # nano USD per output token
+
+
+@dataclass
+class ProviderPattern:
+    pattern: str  # regex to match against URL
+    name: str  # tool_name for the record (e.g. "openai.chat.completions")
+    provider: str  # provider identifier (e.g. "openai", "anthropic")
+
+
+@dataclass
 class AHPConfig:
     """Complete AHP configuration per Section 10."""
 
@@ -58,6 +72,12 @@ class AHPConfig:
     # PII Filters
     filters: List[FilterConfig] = field(default_factory=list)
     filter_presets: List[str] = field(default_factory=list)
+
+    # Pricing (nano USD per token)
+    pricing: List[PricingEntry] = field(default_factory=list)
+
+    # Provider URL patterns (for auto-detecting LLM endpoints)
+    providers: List[ProviderPattern] = field(default_factory=list)
 
     # Agent identity
     agent_name: str = ""
@@ -213,6 +233,48 @@ def _parse_raw_config(raw: Dict[str, Any], agent_name: str) -> AHPConfig:
                     scope=f_raw.get("scope", ["parameters", "results"]),
                 )
             )
+
+    # Pricing (nano USD per token)
+    pricing_raw = raw.get("pricing", {})
+    if isinstance(pricing_raw, dict):
+        # Flat format: {"gpt-4o": [2500, 10000], ...}
+        for model, rates in pricing_raw.items():
+            if isinstance(rates, (list, tuple)) and len(rates) == 2:
+                try:
+                    inp, out = int(rates[0]), int(rates[1])
+                    if inp < 0 or out < 0:
+                        logger.warning("Pricing for %s: negative rates ignored", model)
+                        continue
+                    config.pricing.append(PricingEntry(model=str(model), input=inp, output=out))
+                except (ValueError, TypeError):
+                    logger.warning("Pricing for %s: invalid rate format %r, skipped", model, rates)
+    elif isinstance(pricing_raw, list):
+        # List format: [{"model": "gpt-4o", "input": 2500, "output": 10000}, ...]
+        for entry in pricing_raw:
+            if isinstance(entry, dict) and "model" in entry:
+                try:
+                    inp = int(entry.get("input", 0))
+                    out = int(entry.get("output", 0))
+                    if inp < 0 or out < 0:
+                        logger.warning("Pricing for %s: negative rates ignored", entry["model"])
+                        continue
+                    config.pricing.append(PricingEntry(model=str(entry["model"]), input=inp, output=out))
+                except (ValueError, TypeError):
+                    logger.warning("Pricing for %s: invalid format, skipped", entry.get("model", "?"))
+
+    # Provider URL patterns
+    for prov in raw.get("providers", []):
+        if isinstance(prov, dict) and "pattern" in prov:
+            try:
+                config.providers.append(
+                    ProviderPattern(
+                        pattern=str(prov["pattern"]),
+                        name=str(prov.get("name", "")),
+                        provider=str(prov.get("provider", "")),
+                    )
+                )
+            except (ValueError, TypeError):
+                logger.warning("Provider pattern invalid: %r, skipped", prov)
 
     # Per-agent overrides (first match wins)
     for agent_rule in raw.get("agents", []):

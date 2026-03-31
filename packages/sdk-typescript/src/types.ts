@@ -135,6 +135,11 @@ export interface ActionPayload {
   model_id: string;
   input_token_count: number;
   output_token_count: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  reasoning_tokens: number;
+  cost_nano_usd: number;
+  provider: string;
   authorization: Authorization;
 }
 
@@ -262,6 +267,11 @@ export function createActionPayload(
     model_id: "",
     input_token_count: 0,
     output_token_count: 0,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    reasoning_tokens: 0,
+    cost_nano_usd: 0,
+    provider: "",
     authorization: { type: AuthorizationType.AUTH_NONE, entries: [] },
     ...overrides,
   };

@@ -98,6 +98,11 @@ export interface RecordActionOptions {
   modelId?: string;
   inputTokenCount?: number;
   outputTokenCount?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  reasoningTokens?: number;
+  costNanoUsd?: number;
+  provider?: string;
 }
 
 export class AHPRecorder {
@@ -288,6 +293,11 @@ export class AHPRecorder {
       modelId = "",
       inputTokenCount = 0,
       outputTokenCount = 0,
+      cacheReadTokens = 0,
+      cacheCreationTokens = 0,
+      reasoningTokens = 0,
+      costNanoUsd = 0,
+      provider = "",
     } = opts;
 
     // 0. Flush pending gap from previous failure
@@ -341,6 +351,11 @@ export class AHPRecorder {
       model_id: modelId,
       input_token_count: inputTokenCount,
       output_token_count: outputTokenCount,
+      cache_read_tokens: cacheReadTokens,
+      cache_creation_tokens: cacheCreationTokens,
+      reasoning_tokens: reasoningTokens,
+      cost_nano_usd: costNanoUsd,
+      provider,
       authorization: authorization || {
         type: AuthorizationType.AUTH_NONE,
         entries: [],

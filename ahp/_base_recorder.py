@@ -160,6 +160,19 @@ class RecorderBase:
         self._record_hashes_since_checkpoint: List[bytes] = []
         self._records_since_witness = 0
 
+        # ---- pricing (apply user overrides from config) ----------------------
+        if self._cfg.pricing:
+            from ahp.core.pricing import set_pricing
+
+            user_pricing = {e.model: (e.input, e.output) for e in self._cfg.pricing}
+            set_pricing(user_pricing, merge=True)
+
+        # ---- provider patterns (apply user overrides from config) -----------
+        if self._cfg.providers:
+            from ahp.interceptors.http_helper import add_provider_patterns
+
+            add_provider_patterns([(p.pattern, p.name, p.provider) for p in self._cfg.providers])
+
         # ---- fail-open gap state -------------------------------------------
         self._pending_gap = False
         self._gap_reason = ""

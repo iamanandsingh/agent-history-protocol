@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Schema**: Five new fields on `ActionPayload`: `cache_read_tokens` (uint32), `cache_creation_tokens` (uint32), `reasoning_tokens` (uint32), `cost_nano_usd` (uint64), `provider` (string). All fields default to zero/empty for backward compatibility at the API level. Binary format is a breaking change (acceptable at v0.1.0-alpha).
+- **Cost estimation**: Configurable pricing table (`ahp.yaml` `pricing` section) with built-in defaults for OpenAI, Anthropic, Google Gemini, Mistral, DeepSeek. Auto-estimates `cost_nano_usd` when recording inferences with token counts. User-supplied `cost_nano_usd=0` is respected (not overridden). Thread-safe with overflow protection (capped at uint64 max).
+- **Provider detection**: Auto-detects 13 LLM providers from HTTP endpoint URLs (OpenAI, Azure OpenAI, Anthropic, Google Gemini, Google Vertex, Cohere, Mistral, AWS Bedrock, Groq, Together AI, Fireworks AI, DeepSeek, Perplexity). Configurable via `ahp.yaml` `providers` section for custom endpoints.
+- **Reasoning token extraction**: Extracts reasoning/thinking tokens from OpenAI o-series (`completion_tokens_details.reasoning_tokens`), OpenAI Responses API (`output_tokens_details.reasoning_tokens`), Google Gemini (`usageMetadata.thoughtsTokenCount`), and DeepSeek-R1.
+- **Cache token extraction**: Extracts cached tokens from OpenAI (`prompt_tokens_details.cached_tokens`), OpenAI Responses API (`input_tokens_details.cached_tokens`), Anthropic (`cache_read_input_tokens`, `cache_creation_input_tokens`), and Google Gemini (`cachedContentTokenCount`).
+- **Model ID extraction from URL**: Gemini model IDs extracted from `/models/{model_id}:generateContent` URL pattern when not present in request body.
+- **TypeScript SDK**: All five new fields added to types, canonical serialization, parsing, and recorder. Conformance test vectors updated.
+
 ### Fixed
 - **Critical**: Witness signature verification now checks `verify_signature()` return value (previously accepted any forged signature).
 - **Critical**: Recorder signs canonical JSON checkpoint fields (matching witness verification format), and sends `public_key` alongside `signing_key_id`.

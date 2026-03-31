@@ -48,19 +48,19 @@ class TestHTTPInterceptor(unittest.TestCase):
     """Test HTTP interceptor with realistic HTTP request/response data."""
 
     def test_detect_openai_endpoint(self):
-        self.assertEqual(
-            _detect_llm("https://api.openai.com/v1/chat/completions"),
-            "openai.chat.completions",
-        )
+        name, provider = _detect_llm("https://api.openai.com/v1/chat/completions")
+        self.assertEqual(name, "openai.chat.completions")
+        self.assertEqual(provider, "openai")
 
     def test_detect_anthropic_endpoint(self):
-        self.assertEqual(
-            _detect_llm("https://api.anthropic.com/v1/messages"),
-            "anthropic.messages",
-        )
+        name, provider = _detect_llm("https://api.anthropic.com/v1/messages")
+        self.assertEqual(name, "anthropic.messages")
+        self.assertEqual(provider, "anthropic")
 
     def test_non_llm_endpoint(self):
-        self.assertIsNone(_detect_llm("https://api.stripe.com/v1/charges"))
+        name, provider = _detect_llm("https://api.stripe.com/v1/charges")
+        self.assertIsNone(name)
+        self.assertEqual(provider, "")
 
     def test_openai_inference_action(self):
         """Simulate a real OpenAI API call and verify the ActionPayload."""

@@ -62,6 +62,11 @@ class ActionPayload:
     model_id: str = ""
     input_token_count: int = 0
     output_token_count: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+    reasoning_tokens: int = 0
+    cost_nano_usd: int = 0
+    provider: str = ""
     authorization: Authorization = field(default_factory=Authorization)
 
 

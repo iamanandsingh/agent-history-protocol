@@ -70,9 +70,10 @@ describe("Conformance: canonical bytes match Python SDK", () => {
     // SHA-256
     const hash = createHash("sha256").update(cb).digest("hex");
 
-    // Expected hash from Python SDK
+    // Expected hash from Python SDK (updated after adding cache_read_tokens,
+    // cache_creation_tokens, reasoning_tokens, cost_nano_usd, provider fields)
     const expectedHash =
-      "9cdbb99f78a5636458dd7939a5e71a867f9bf5d088bdec415c9cbd520f89ab66";
+      "9be8942a6a7c5995708cf88522160c1836296c071f57cdc80e8f709e2bd1de68";
 
     console.log(`Canonical bytes length: ${cb.length}`);
     console.log(`SHA-256: ${hash}`);
@@ -80,7 +81,7 @@ describe("Conformance: canonical bytes match Python SDK", () => {
     console.log(`Match: ${hash === expectedHash}`);
 
     assert.equal(hash, expectedHash, "SHA-256 hash must match Python test vector");
-    assert.equal(cb.length, 214, "Canonical bytes length must be 214");
+    assert.equal(cb.length, 238, "Canonical bytes length must be 238");
   });
 
   test("Canonical bytes hex matches Python output exactly", () => {
@@ -119,6 +120,8 @@ describe("Conformance: canonical bytes match Python SDK", () => {
     const hex = Buffer.from(cb).toString("hex");
 
     // Expected hex from Python canonical_bytes output
+    // (updated after adding cache_read_tokens, cache_creation_tokens,
+    // cost_nano_usd, provider fields)
     const expectedHex =
       "010101010101010101010101010101010202020202020202020202020202020203030303030303030303030303030303" +
       "004cf1238e010000" + // timestamp_ms = 1710000000000 LE
@@ -142,6 +145,11 @@ describe("Conformance: canonical bytes match Python SDK", () => {
       "00000000" + // model_id (empty string, length=0)
       "00000000" + // input_token_count = 0
       "00000000" + // output_token_count = 0
+      "00000000" + // cache_read_tokens = 0
+      "00000000" + // cache_creation_tokens = 0
+      "00000000" + // reasoning_tokens = 0
+      "0000000000000000" + // cost_nano_usd = 0 (uint64)
+      "00000000" + // provider (empty string, length=0)
       "01000000" + // authorization.type = AUTH_NONE (1)
       "00000000"; // authorization.entries count = 0
 

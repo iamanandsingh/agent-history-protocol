@@ -36,6 +36,8 @@ MAX_TOOL_NAME_LENGTH = 1024
 MAX_AUTH_ENTRIES = 100
 MAX_INTERCEPTORS = 50
 MAX_RECORD_SIZE = 1048576  # 1MB canonical bytes
+MAX_UINT32 = (2**32) - 1
+MAX_UINT64 = (2**64) - 1
 
 
 class ValidationError(Exception):
@@ -93,6 +95,16 @@ def _validate_action(p: ActionPayload) -> List[str]:
         errors.append(f"evidence_uri too long: {len(p.evidence_uri.encode('utf-8'))}")
     if len(p.model_id.encode("utf-8")) > MAX_TOOL_NAME_LENGTH:
         errors.append(f"model_id too long: {len(p.model_id.encode('utf-8'))}")
+    if len(p.provider.encode("utf-8")) > MAX_TOOL_NAME_LENGTH:
+        errors.append(f"provider too long: {len(p.provider.encode('utf-8'))}")
+    if p.cache_read_tokens < 0 or p.cache_read_tokens > MAX_UINT32:
+        errors.append(f"cache_read_tokens must be 0..{MAX_UINT32}, got {p.cache_read_tokens}")
+    if p.cache_creation_tokens < 0 or p.cache_creation_tokens > MAX_UINT32:
+        errors.append(f"cache_creation_tokens must be 0..{MAX_UINT32}, got {p.cache_creation_tokens}")
+    if p.reasoning_tokens < 0 or p.reasoning_tokens > MAX_UINT32:
+        errors.append(f"reasoning_tokens must be 0..{MAX_UINT32}, got {p.reasoning_tokens}")
+    if p.cost_nano_usd < 0 or p.cost_nano_usd > MAX_UINT64:
+        errors.append(f"cost_nano_usd must be 0..{MAX_UINT64}, got {p.cost_nano_usd}")
     if len(p.parameters_hash) != 16:
         errors.append(f"parameters_hash must be 16 bytes, got {len(p.parameters_hash)}")
     if len(p.result_hash) != 16:

@@ -74,17 +74,22 @@ def _serialize_action(buf: bytearray, p: ActionPayload) -> None:
     _append_string(buf, p.model_id)  # tag 12
     buf += _uint32(p.input_token_count)  # tag 13
     buf += _uint32(p.output_token_count)  # tag 14
-    # tag 15: Authorization (nested, inline)
-    buf += _uint32(p.authorization.type)  # tag 15.1: enum
-    buf += _uint32(len(p.authorization.entries))  # tag 15.2: count
+    buf += _uint32(p.cache_read_tokens)  # tag 15
+    buf += _uint32(p.cache_creation_tokens)  # tag 16
+    buf += _uint32(p.reasoning_tokens)  # tag 17
+    buf += _uint64(p.cost_nano_usd)  # tag 18
+    _append_string(buf, p.provider)  # tag 19
+    # tag 20: Authorization (nested, inline)
+    buf += _uint32(p.authorization.type)  # tag 20.1: enum
+    buf += _uint32(len(p.authorization.entries))  # tag 20.2: count
     for entry in p.authorization.entries:
-        buf += _uint32(entry.authorizer_type)  # tag 15.2.1: enum
-        _append_string(buf, entry.authorizer_id)  # tag 15.2.2
-        buf += entry.authorizer_agent_id  # tag 15.2.3: 16 bytes UUID
-        buf += _uint64(entry.authorizer_seq)  # tag 15.2.4
-        buf += _uint32(entry.decision)  # tag 15.2.5: enum
-        _append_string(buf, entry.condition)  # tag 15.2.6
-        buf += _uint64(entry.timestamp_ms)  # tag 15.2.7
+        buf += _uint32(entry.authorizer_type)  # tag 20.2.1: enum
+        _append_string(buf, entry.authorizer_id)  # tag 20.2.2
+        buf += entry.authorizer_agent_id  # tag 20.2.3: 16 bytes UUID
+        buf += _uint64(entry.authorizer_seq)  # tag 20.2.4
+        buf += _uint32(entry.decision)  # tag 20.2.5: enum
+        _append_string(buf, entry.condition)  # tag 20.2.6
+        buf += _uint64(entry.timestamp_ms)  # tag 20.2.7
 
 
 def _serialize_gap(buf: bytearray, p: GapPayload) -> None:

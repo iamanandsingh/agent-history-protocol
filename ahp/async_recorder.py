@@ -123,6 +123,11 @@ class AsyncAHPRecorder(RecorderBase):
         model_id: str = "",
         input_token_count: int = 0,
         output_token_count: int = 0,
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        cost_nano_usd: Optional[int] = None,
+        provider: str = "",
         authorization: Optional[Authorization] = None,
         parent_action_id: Optional[bytes] = None,
         session_id: Optional[bytes] = None,
@@ -132,6 +137,14 @@ class AsyncAHPRecorder(RecorderBase):
         # Flush pending gap
         if self._pending_gap:
             await self._emit_pending_gap()
+
+        # Auto-estimate cost if not provided and we have model + tokens
+        if cost_nano_usd is None and model_id and (input_token_count > 0 or output_token_count > 0):
+            from ahp.core.pricing import estimate_cost_nano
+
+            cost_nano_usd = estimate_cost_nano(model_id, input_token_count, output_token_count)
+        if cost_nano_usd is None:
+            cost_nano_usd = 0
 
         # PII filtering (shared logic from base)
         param_hash, result_hash, filtered_params, filtered_result, redacted = self._filter_action_payloads(
@@ -155,6 +168,11 @@ class AsyncAHPRecorder(RecorderBase):
             model_id=model_id,
             input_token_count=input_token_count,
             output_token_count=output_token_count,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cost_nano_usd=cost_nano_usd,
+            provider=provider,
             authorization=authorization or Authorization(type=AuthorizationType.AUTH_NONE),
         )
 
@@ -177,6 +195,11 @@ class AsyncAHPRecorder(RecorderBase):
         model_id: str = "",
         input_token_count: int = 0,
         output_token_count: int = 0,
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        cost_nano_usd: Optional[int] = None,
+        provider: str = "",
         response_time_ms: int = 0,
         **kwargs: Any,
     ) -> Optional[Record]:
@@ -190,6 +213,11 @@ class AsyncAHPRecorder(RecorderBase):
             model_id=model_id,
             input_token_count=input_token_count,
             output_token_count=output_token_count,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cost_nano_usd=cost_nano_usd,
+            provider=provider,
             response_time_ms=response_time_ms,
             **kwargs,
         )

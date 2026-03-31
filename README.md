@@ -80,14 +80,33 @@ recorder.recordAction({
 recorder.close();
 ```
 
-### Auto-instrumentation
-
-Automatically capture all HTTP calls (requests, httpx, urllib, fetch):
+### Record an LLM inference
 
 ```python
-# Python
+recorder.record_inference(
+    tool_name="claude-sonnet-4",
+    model_id="claude-sonnet-4-6",
+    input_token_count=1200,
+    output_token_count=340,
+    reasoning_tokens=512,        # thinking/reasoning tokens (o3, Gemini, DeepSeek-R1)
+    cache_read_tokens=800,       # prompt tokens served from cache
+    provider="anthropic",        # auto-detected if using interceptors
+    # cost_nano_usd auto-estimated from configurable pricing table
+)
+```
+
+### Auto-instrumentation
+
+Automatically capture all HTTP calls — provider, model, tokens, cost, and reasoning tokens are extracted automatically:
+
+```python
+# Python — patches requests, httpx, urllib
 from ahp.interceptors.http_auto import install_http_interceptor
-install_http_interceptor(recorder)  # patches requests, httpx, urllib
+install_http_interceptor(recorder)
+
+# Supports: OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock,
+#           Groq, Together AI, Fireworks, DeepSeek, Mistral, Cohere, Perplexity
+# Add custom providers via ahp.yaml (see Configuration below)
 ```
 
 ```typescript
@@ -148,6 +167,28 @@ CHAIN VALID
    Hash chain:    42 records verified, 0 broken links
    Gaps:          0
 ```
+
+## Configuration
+
+Create `ahp.yaml` for custom pricing and provider patterns:
+
+```yaml
+defaults:
+  level: 2
+
+# Override or add model pricing (nano USD per token)
+pricing:
+  gpt-4o: [2500, 10000]           # $2.50 / $10 per 1M tokens
+  my-fine-tuned-model: [500, 2000] # custom model
+
+# Add custom LLM endpoint detection
+providers:
+  - pattern: 'llm\.mycompany\.internal'
+    name: internal.llm.chat
+    provider: internal
+```
+
+Built-in pricing covers OpenAI, Anthropic, Google Gemini, Mistral, and DeepSeek. User entries merge on top.
 
 ## Specification
 

@@ -86,6 +86,11 @@ def _record_http_call(
             model_id=action.model_id,
             input_token_count=action.input_token_count,
             output_token_count=action.output_token_count,
+            cache_read_tokens=action.cache_read_tokens,
+            cache_creation_tokens=action.cache_creation_tokens,
+            reasoning_tokens=action.reasoning_tokens,
+            cost_nano_usd=action.cost_nano_usd,
+            provider=action.provider,
         )
     except Exception:
         pass  # Fail-open: never crash the agent

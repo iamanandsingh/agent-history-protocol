@@ -109,6 +109,11 @@ One agent action. The core record type.
 | `model_id` | string (optional) | LLM model identifier. MUST be set when `action_type = INFERENCE` |
 | `input_token_count` | uint32 (optional) | Prompt token count. For INFERENCE type |
 | `output_token_count` | uint32 (optional) | Response token count. For INFERENCE type |
+| `cache_read_tokens` | uint32 (optional) | Tokens served from prompt cache (OpenAI `cached_tokens`, Anthropic `cache_read_input_tokens`) |
+| `cache_creation_tokens` | uint32 (optional) | Tokens written to prompt cache (Anthropic `cache_creation_input_tokens`) |
+| `reasoning_tokens` | uint32 (optional) | Internal reasoning/thinking tokens consumed by the model (OpenAI o-series `reasoning_tokens`, Gemini `thoughtsTokenCount`, DeepSeek-R1) |
+| `cost_nano_usd` | uint64 (optional) | Pre-calculated cost in nano USD (1 USD = 1,000,000,000 nano USD). Auto-estimated from configurable pricing table if not provided. User-supplied values take priority |
+| `provider` | string (optional) | LLM provider identifier: `"openai"`, `"anthropic"`, `"google"`, `"azure-openai"`, `"aws-bedrock"`, `"google-vertex"`, `"groq"`, `"deepseek"`, etc. Auto-detected from endpoint URL |
 | `authorization` | Authorization | Who approved this action. AUTH_NONE when no authorization applies. See Section 3.9 |
 
 **Inference semantics:** When `action_type = INFERENCE`, the record captures an LLM reasoning step. `parameters_hash` covers the prompt sent to the LLM. `result_hash` covers the full response including reasoning/thinking tokens. Tool calls resulting from the inference MUST set `parent_action_id` to the INFERENCE record's `record_id`. Sequential INFERENCE records in the same session SHOULD set `parent_action_id` to the most recent prior INFERENCE record (conversational continuity).
@@ -430,17 +435,22 @@ function canonical_bytes(record):
             buf.append_string(record.payload.model_id)                 // tag 12
             buf.append_uint32_le(record.payload.input_token_count)     // tag 13
             buf.append_uint32_le(record.payload.output_token_count)    // tag 14
-            // Authorization (tag 15) — nested message, serialized inline
-            buf.append_uint32_le(record.payload.authorization.type)    // tag 15.1
-            buf.append_uint32_le(len(record.payload.authorization.entries))  // tag 15.2 count
+            buf.append_uint32_le(record.payload.cache_read_tokens)     // tag 15
+            buf.append_uint32_le(record.payload.cache_creation_tokens) // tag 16
+            buf.append_uint32_le(record.payload.reasoning_tokens)      // tag 17
+            buf.append_uint64_le(record.payload.cost_nano_usd)        // tag 18
+            buf.append_string(record.payload.provider)                 // tag 19
+            // Authorization (tag 20) — nested message, serialized inline
+            buf.append_uint32_le(record.payload.authorization.type)    // tag 20.1
+            buf.append_uint32_le(len(record.payload.authorization.entries))  // tag 20.2 count
             for entry in record.payload.authorization.entries:
-                buf.append_uint32_le(entry.authorizer_type)            // tag 15.2.1
-                buf.append_string(entry.authorizer_id)                 // tag 15.2.2
-                buf.append_optional_uuid(entry.authorizer_agent_id)    // tag 15.2.3
-                buf.append_uint64_le(entry.authorizer_seq)             // tag 15.2.4
-                buf.append_uint32_le(entry.decision)                   // tag 15.2.5
-                buf.append_string(entry.condition)                     // tag 15.2.6
-                buf.append_uint64_le(entry.timestamp_ms)               // tag 15.2.7
+                buf.append_uint32_le(entry.authorizer_type)            // tag 20.2.1
+                buf.append_string(entry.authorizer_id)                 // tag 20.2.2
+                buf.append_optional_uuid(entry.authorizer_agent_id)    // tag 20.2.3
+                buf.append_uint64_le(entry.authorizer_seq)             // tag 20.2.4
+                buf.append_uint32_le(entry.decision)                   // tag 20.2.5
+                buf.append_string(entry.condition)                     // tag 20.2.6
+                buf.append_uint64_le(entry.timestamp_ms)               // tag 20.2.7
         case GAP:
             buf.append_uint64_le(record.payload.first_lost_sequence)   // tag 1
             buf.append_uint64_le(record.payload.last_lost_sequence)    // tag 2
@@ -868,7 +878,37 @@ Standard presets that all SDKs MUST ship with identical patterns:
 
 Preset patterns are defined in Appendix E. Presets are immutable once published — pattern updates require a new versioned preset.
 
-### 10.4 Per-Agent Overrides
+### 10.4 Pricing Configuration
+
+SDKs SHOULD provide configurable pricing tables for automatic cost estimation. When an `INFERENCE` record is created with token counts but without an explicit `cost_nano_usd`, the SDK auto-estimates cost by matching `model_id` against the pricing table (longest prefix wins).
+
+Cost is expressed in **nano USD** (1 USD = 1,000,000,000 nano USD) as a uint64 integer to avoid floating-point non-determinism in hash chain serialization.
+
+```yaml
+pricing:
+  # Flat format: model_prefix → [input_nano_per_token, output_nano_per_token]
+  gpt-4o: [2500, 10000]          # $2.50 / $10.00 per 1M tokens
+  claude-sonnet-4: [3000, 15000] # $3.00 / $15.00 per 1M tokens
+  gemini-3-flash: [500, 3000]    # $0.50 / $3.00 per 1M tokens
+  my-custom-model: [100, 400]    # custom rates
+```
+
+SDKs MUST ship built-in defaults for common models as a fallback. User-configured entries are merged on top (user entries take priority). If the user explicitly passes `cost_nano_usd=0`, the SDK MUST NOT override it with an auto-estimate (zero means "free").
+
+### 10.5 Provider URL Patterns
+
+SDKs that auto-intercept HTTP calls SHOULD detect LLM provider endpoints to classify them as `INFERENCE` actions and extract `provider`, `model_id`, and token counts from the response. The detection patterns are configurable:
+
+```yaml
+providers:
+  - pattern: 'llm\.mycompany\.internal'  # regex
+    name: internal.llm.chat               # tool_name for the record
+    provider: internal                     # provider identifier
+```
+
+User-configured patterns are checked before built-in defaults, allowing overrides for custom endpoints, proxies, or self-hosted LLMs.
+
+### 10.6 Per-Agent Overrides
 
 ```
 agents:
@@ -881,7 +921,7 @@ agents:
 - All other agent-level fields OVERRIDE the corresponding default.
 - Unmatched agents use defaults.
 
-### 10.5 Config Changes
+### 10.7 Config Changes
 
 If configuration is hot-reloaded, the SDK MUST emit a new BootRecord with the updated state. The chain documents when the policy changed and which records were produced under which config.
 
@@ -1086,7 +1126,12 @@ message ActionPayload {
     string model_id = 12;
     uint32 input_token_count = 13;
     uint32 output_token_count = 14;
-    Authorization authorization = 15;
+    uint32 cache_read_tokens = 15;
+    uint32 cache_creation_tokens = 16;
+    uint32 reasoning_tokens = 17;
+    uint64 cost_nano_usd = 18;
+    string provider = 19;
+    Authorization authorization = 20;
 }
 
 message Authorization {
@@ -1287,21 +1332,15 @@ payload:
   model_id:          "" (empty)
   input_token_count: 0
   output_token_count: 0
+  cache_read_tokens: 0
+  cache_creation_tokens: 0
+  reasoning_tokens: 0
+  cost_nano_usd: 0
+  provider:        "" (empty)
   authorization:     (type: AUTH_NONE (1), entries count: 0)
 ```
 
-Canonical bytes (hex):
-```
-01903f5a00007000800000000000000101903f5a000070008000000000000010
-01903f5a000070008000000000000020004cf1238e01000001000000000000
-00000000000000000000000000000000000000000000000000000000000000
-00000001000000010000000100000000000000000000000000000000000000
-09000000726561645f66696c65f1e315a560763fcc966159bdae9a783314
-1f2ae6726c9419cc9f7475d93fa6bf010000002a000000010000000100000
-00000000000000000000000000000000000000000000100000000000000
-```
-
-Size: 214 bytes
+Note: The canonical byte size depends on the exact content of `parameters_hash` and `result_hash`. For a minimal record with all token/cost fields at zero, empty `provider`, and no authorization entries, the envelope + payload size is approximately 238 bytes.
 Record hash (SHA-256): `a13498b6876803c50d5c6764e57bead259df0e2e89a55fde014a4ba0bd813360`
 
 ### B.2 All Record Type Test Vectors

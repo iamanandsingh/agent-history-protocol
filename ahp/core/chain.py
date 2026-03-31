@@ -464,6 +464,15 @@ def parse_action_payload(payload_bytes: bytes) -> dict:
     offset += 4
     output_token_count = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
     offset += 4
+    cache_read_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
+    offset += 4
+    cache_creation_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
+    offset += 4
+    reasoning_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
+    offset += 4
+    cost_nano_usd = struct.unpack("<Q", payload_bytes[offset : offset + 8])[0]
+    offset += 8
+    provider, offset = _read_string(payload_bytes, offset)
 
     # Authorization (nested)
     auth_type = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
@@ -512,6 +521,11 @@ def parse_action_payload(payload_bytes: bytes) -> dict:
         "model_id": model_id,
         "input_token_count": input_token_count,
         "output_token_count": output_token_count,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_creation_tokens": cache_creation_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "cost_nano_usd": cost_nano_usd,
+        "provider": provider,
         "authorization": {
             "type": auth_type,
             "entries": auth_entries,

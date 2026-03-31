@@ -91,6 +91,11 @@ def record_to_json(stored_bytes: bytes) -> dict:
             "model_id": payload["model_id"] or None,
             "input_token_count": payload["input_token_count"],
             "output_token_count": payload["output_token_count"],
+            "cache_read_tokens": payload["cache_read_tokens"],
+            "cache_creation_tokens": payload["cache_creation_tokens"],
+            "reasoning_tokens": payload["reasoning_tokens"],
+            "cost_nano_usd": payload["cost_nano_usd"],
+            "provider": payload["provider"] or None,
             "authorization": {
                 "type": _safe_enum_name(AuthorizationType, payload["authorization"]["type"]),
                 "entries": auth_entries,
@@ -233,4 +238,9 @@ def format_action_summary(stored_bytes: bytes) -> dict:
         "response_time_ms": payload["response_time_ms"],
         "authorization": auth_display,
         "model_id": payload["model_id"],
+        "provider": payload["provider"],
+        "cache_read_tokens": payload["cache_read_tokens"],
+        "cache_creation_tokens": payload["cache_creation_tokens"],
+        "reasoning_tokens": payload["reasoning_tokens"],
+        "cost_nano_usd": payload["cost_nano_usd"],
     }
