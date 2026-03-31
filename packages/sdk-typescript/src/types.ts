@@ -91,7 +91,7 @@ export enum RecoveryMethod {
 
 // --- Constants ---
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** 32 zero bytes — genesis prev_hash sentinel. */
 export const ZERO_HASH_32: Readonly<Uint8Array> = new Uint8Array(32);

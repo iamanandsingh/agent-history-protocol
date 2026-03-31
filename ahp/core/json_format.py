@@ -56,7 +56,7 @@ def record_to_json(stored_bytes: bytes) -> dict:
     rtype = env["record_type"]
 
     if rtype == RecordType.ACTION:
-        payload = parse_action_payload(env["payload_bytes"])
+        payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
         auth_entries = []
         for e in payload["authorization"]["entries"]:
             entry = {
@@ -201,7 +201,7 @@ def format_action_summary(stored_bytes: bytes) -> dict:
             "authorization": "—",
         }
 
-    payload = parse_action_payload(env["payload_bytes"])
+    payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
 
     try:
         auth_type = AuthorizationType(payload["authorization"]["type"])

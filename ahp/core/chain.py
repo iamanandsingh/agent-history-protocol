@@ -436,8 +436,13 @@ def parse_envelope(stored_bytes: bytes) -> dict:
     }
 
 
-def parse_action_payload(payload_bytes: bytes) -> dict:
-    """Parse ActionPayload fields from canonical bytes after the envelope."""
+def parse_action_payload(payload_bytes: bytes, schema_version: int = 2) -> dict:
+    """Parse ActionPayload fields from canonical bytes after the envelope.
+
+    Handles both schema_version=1 (original) and schema_version=2 (with
+    cache_read_tokens, cache_creation_tokens, reasoning_tokens, cost_nano_usd,
+    provider fields). Version 1 fields default to zero/empty.
+    """
     offset = 0
     parent_action_id = payload_bytes[offset : offset + 16]
     offset += 16
@@ -464,15 +469,23 @@ def parse_action_payload(payload_bytes: bytes) -> dict:
     offset += 4
     output_token_count = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
     offset += 4
-    cache_read_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
-    offset += 4
-    cache_creation_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
-    offset += 4
-    reasoning_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
-    offset += 4
-    cost_nano_usd = struct.unpack("<Q", payload_bytes[offset : offset + 8])[0]
-    offset += 8
-    provider, offset = _read_string(payload_bytes, offset)
+
+    # V2 fields (absent in schema_version=1)
+    cache_read_tokens = 0
+    cache_creation_tokens = 0
+    reasoning_tokens = 0
+    cost_nano_usd = 0
+    provider = ""
+    if schema_version >= 2:
+        cache_read_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
+        offset += 4
+        cache_creation_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
+        offset += 4
+        reasoning_tokens = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]
+        offset += 4
+        cost_nano_usd = struct.unpack("<Q", payload_bytes[offset : offset + 8])[0]
+        offset += 8
+        provider, offset = _read_string(payload_bytes, offset)
 
     # Authorization (nested)
     auth_type = struct.unpack("<I", payload_bytes[offset : offset + 4])[0]

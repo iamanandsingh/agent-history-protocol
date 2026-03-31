@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-31
+
+### Added
+- **Session/Span context managers**: `ahp.session("task")` / `session.span("agent")` for auto-managing `parent_action_id` causal trees. `contextvars`-based, async-safe. `span.log_tool()`, `span.log_llm()`, `span.child_span()`.
+- **OpenAI client adapter**: `instrument(openai.OpenAI())` auto-records all `chat.completions.create()` calls. Non-streaming and streaming (auto-injects `stream_options.include_usage`). Extracts model, tokens, cached/reasoning tokens, cost.
+- **Schema version 2**: Binary format now includes `schema_version=2` in the envelope. Parser reads both v1 (original) and v2 (with new fields) chains for backwards compatibility.
+
+### Changed
+- `SCHEMA_VERSION` bumped from 1 to 2. New chains are written with v2. Old v1 chains can still be read (new fields default to zero/empty).
+- Version bump: 0.2.0 → 1.0.0 (stable API guarantee).
+
 ## [0.2.0] - 2026-03-31
 
 ### Added

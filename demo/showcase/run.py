@@ -42,7 +42,7 @@ def _get_last_action_auth(records: list) -> str:
     for stored in reversed(records):
         env = parse_envelope(stored)
         if env["record_type"] == RecordType.ACTION:
-            payload = parse_action_payload(env["payload_bytes"])
+            payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
             auth_type = AuthorizationType(payload["authorization"]["type"])
             entries = payload["authorization"]["entries"]
             if auth_type == AuthorizationType.AUTH_NONE:
@@ -71,7 +71,7 @@ def _get_auths_since(records: list, start_idx: int) -> str:
         env = parse_envelope(stored)
         if env["record_type"] != RecordType.ACTION:
             continue
-        payload = parse_action_payload(env["payload_bytes"])
+        payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
         auth_type = AuthorizationType(payload["authorization"]["type"])
         entries = payload["authorization"]["entries"]
         if auth_type != AuthorizationType.AUTH_NONE:
@@ -304,7 +304,7 @@ def main():
         for stored in chain_records:
             env = parse_envelope(stored)
             if env["record_type"] == RecordType.ACTION:
-                payload = parse_action_payload(env["payload_bytes"])
+                payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
                 if payload["action_type"] == 2:  # INFERENCE
                     inference_count += 1
                 else:

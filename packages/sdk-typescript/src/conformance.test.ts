@@ -73,7 +73,7 @@ describe("Conformance: canonical bytes match Python SDK", () => {
     // Expected hash from Python SDK (updated after adding cache_read_tokens,
     // cache_creation_tokens, reasoning_tokens, cost_nano_usd, provider fields)
     const expectedHash =
-      "9be8942a6a7c5995708cf88522160c1836296c071f57cdc80e8f709e2bd1de68";
+      "fa67283648e2768d86ce352909f4be584b717ee0c9f6092514418336a8d8885d";
 
     console.log(`Canonical bytes length: ${cb.length}`);
     console.log(`SHA-256: ${hash}`);
@@ -127,7 +127,7 @@ describe("Conformance: canonical bytes match Python SDK", () => {
       "004cf1238e010000" + // timestamp_ms = 1710000000000 LE
       "0100000000000000" + // sequence = 1 LE
       "0000000000000000000000000000000000000000000000000000000000000000" + // prev_hash
-      "01000000" + // schema_version = 1
+      "02000000" + // schema_version = 2
       "01000000" + // record_type = ACTION (1)
       "01000000" + // payload type discriminator = ACTION (1)
       "00000000000000000000000000000000" + // parent_action_id (zeros)
@@ -236,7 +236,7 @@ describe("Conformance: canonical bytes match Python SDK", () => {
   });
 
   test("Constants are correct", () => {
-    assert.equal(SCHEMA_VERSION, 1);
+    assert.equal(SCHEMA_VERSION, 2);
     assert.equal(ZERO_HASH_32.length, 32);
     assert.equal(ZERO_UUID.length, 16);
     assert.ok(ZERO_HASH_32.every((b) => b === 0));

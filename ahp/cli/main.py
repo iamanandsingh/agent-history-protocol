@@ -84,7 +84,7 @@ def cmd_log(
             env = parse_envelope(stored)
             if env["record_type"] != RecordType.ACTION:
                 continue
-            payload = parse_action_payload(env["payload_bytes"])
+            payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
             auth_type = AuthorizationType(payload["authorization"]["type"])
 
             if unauthorized:
@@ -165,7 +165,7 @@ def cmd_show(record_seq: int, chain: Optional[str] = None, tree: bool = False) -
         env = parse_envelope(stored)
         record_id_to_seq[env["record_id"]] = env["sequence"]
         if env["record_type"] == RecordType.ACTION:
-            payload = parse_action_payload(env["payload_bytes"])
+            payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
             parent_id = payload["parent_action_id"]
             if parent_id != ZERO_UUID:
                 children_map[parent_id].append(env["sequence"])
@@ -178,7 +178,7 @@ def cmd_show(record_seq: int, chain: Optional[str] = None, tree: bool = False) -
         env = parse_envelope(stored)
         prefix = "  " * indent
         if env["record_type"] == RecordType.ACTION:
-            payload = parse_action_payload(env["payload_bytes"])
+            payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
             atype = ActionType(payload["action_type"]).name
             tool = payload["tool_name"]
             print(f"{prefix}[{seq}] {atype}: {tool}")
@@ -321,7 +321,7 @@ def cmd_trace(session_prefix: str, chain: Optional[str] = None) -> None:
     for env, stored in session_records:
         seq = env["sequence"]
         if env["record_type"] == RecordType.ACTION:
-            payload = parse_action_payload(env["payload_bytes"])
+            payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
             parent_id = payload["parent_action_id"]
             if parent_id != ZERO_UUID and parent_id in record_id_to_seq:
                 children_map[parent_id].append(seq)
@@ -343,7 +343,7 @@ def cmd_trace(session_prefix: str, chain: Optional[str] = None) -> None:
         ts = _ts(env["timestamp_ms"])
 
         if env["record_type"] == RecordType.ACTION:
-            payload = parse_action_payload(env["payload_bytes"])
+            payload = parse_action_payload(env["payload_bytes"], schema_version=env["schema_version"])
             atype = ActionType(payload["action_type"]).name
             tool = payload["tool_name"]
             latency = f"{payload['response_time_ms']}ms" if payload["response_time_ms"] else ""
