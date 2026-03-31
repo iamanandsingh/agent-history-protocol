@@ -7,14 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-31
+
 ### Added
-- **Schema**: Five new fields on `ActionPayload`: `cache_read_tokens` (uint32), `cache_creation_tokens` (uint32), `reasoning_tokens` (uint32), `cost_nano_usd` (uint64), `provider` (string). All fields default to zero/empty for backward compatibility at the API level. Binary format is a breaking change (acceptable at v0.1.0-alpha).
-- **Cost estimation**: Configurable pricing table (`ahp.yaml` `pricing` section) with built-in defaults for OpenAI, Anthropic, Google Gemini, Mistral, DeepSeek. Auto-estimates `cost_nano_usd` when recording inferences with token counts. User-supplied `cost_nano_usd=0` is respected (not overridden). Thread-safe with overflow protection (capped at uint64 max).
-- **Provider detection**: Auto-detects 13 LLM providers from HTTP endpoint URLs (OpenAI, Azure OpenAI, Anthropic, Google Gemini, Google Vertex, Cohere, Mistral, AWS Bedrock, Groq, Together AI, Fireworks AI, DeepSeek, Perplexity). Configurable via `ahp.yaml` `providers` section for custom endpoints.
-- **Reasoning token extraction**: Extracts reasoning/thinking tokens from OpenAI o-series (`completion_tokens_details.reasoning_tokens`), OpenAI Responses API (`output_tokens_details.reasoning_tokens`), Google Gemini (`usageMetadata.thoughtsTokenCount`), and DeepSeek-R1.
-- **Cache token extraction**: Extracts cached tokens from OpenAI (`prompt_tokens_details.cached_tokens`), OpenAI Responses API (`input_tokens_details.cached_tokens`), Anthropic (`cache_read_input_tokens`, `cache_creation_input_tokens`), and Google Gemini (`cachedContentTokenCount`).
-- **Model ID extraction from URL**: Gemini model IDs extracted from `/models/{model_id}:generateContent` URL pattern when not present in request body.
-- **TypeScript SDK**: All five new fields added to types, canonical serialization, parsing, and recorder. Conformance test vectors updated.
+- **Schema**: Five new fields on `ActionPayload`: `cache_read_tokens` (uint32), `cache_creation_tokens` (uint32), `reasoning_tokens` (uint32), `cost_nano_usd` (uint64), `provider` (string). Binary format breaking change (acceptable pre-1.0).
+- **Cost estimation**: Configurable pricing table (`ahp.yaml` `pricing` section) with built-in defaults for 30+ models across OpenAI, Anthropic, Google Gemini, Mistral, DeepSeek. Auto-estimates `cost_nano_usd` from model + token counts. User-supplied `cost_nano_usd=0` respected (not overridden). Thread-safe with uint64 overflow protection.
+- **Provider detection**: Auto-detects 13 LLM providers from HTTP endpoint URLs (OpenAI, Azure OpenAI, Anthropic, Gemini, Vertex, Cohere, Mistral, Bedrock, Groq, Together AI, Fireworks AI, DeepSeek, Perplexity). Custom patterns configurable via `ahp.yaml` `providers` section.
+- **Token extraction**: Extracts reasoning tokens (OpenAI o-series, Gemini thinking, DeepSeek-R1), cached tokens (OpenAI, Anthropic, Gemini), from both Chat Completions and Responses API formats.
+- **Decorator instrumentation**: `@ahp.trace_tool`, `@ahp.trace_llm`, `@ahp.trace_agent` decorators that auto-capture input/output/duration/errors for any Python function. Supports sync and async, bare and parameterized usage. Fail-open. Global default recorder via `set_default_recorder()`.
+- **Live tail**: `ahp tail [--chain FILE] [--last N] [--format table|json] [--interval S]` CLI command. Polls chain file for new records and displays them in real time. Handles file-not-yet-created, partial writes, and file rotation.
+- **Model ID from URL**: Gemini model IDs extracted from `/models/{model_id}:generateContent` URL pattern.
+- **TypeScript SDK**: All five new fields added to types, serialization, parsing, recorder. Conformance test vectors updated.
+- **AsyncAHPRecorder**: Added missing `result_status` parameter to `record_action()` (was hardcoded to SUCCESS).
 
 ### Fixed
 - **Critical**: Witness signature verification now checks `verify_signature()` return value (previously accepted any forged signature).

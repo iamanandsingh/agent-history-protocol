@@ -1,30 +1,14 @@
-# AHP Roadmap — Post-v0.1.0 Priorities
+# AHP Roadmap
 
-Prioritized list of features that fill real gaps in the current SDK.
-Everything else from the broader suggestions either already exists, is premature, or belongs in downstream tools.
+Prioritized list of features. Shipped items marked DONE.
 
-## Priority 1: Decorator-Based Instrumentation
+## Priority 1: Decorator-Based Instrumentation -- DONE
 
-**Gap:** Auto-interceptors (HTTP, MCP, gRPC) only capture network calls. Custom tools that are plain Python functions require manual `record_action()` calls.
+**Shipped in v0.2.0.** `@ahp.trace_tool`, `@ahp.trace_agent`, `@ahp.trace_llm` decorators. Sync + async, bare and parameterized, fail-open. Global default recorder via `set_default_recorder()`.
 
-**Deliverable:** `@ahp.trace_tool`, `@ahp.trace_agent`, `@ahp.trace_llm` decorators that auto-capture input args, return value, duration, and success/failure.
+## Priority 2: Live Tail (`ahp tail`) -- DONE
 
-```python
-@ahp.trace_tool
-def web_search(query: str) -> dict:
-    return results  # input, output, duration, status all captured automatically
-```
-
-## Priority 2: Live Tail (`ahp tail --follow`)
-
-**Gap:** CLI has `ahp log` for static viewing but no live streaming mode. Developers can't watch events as they happen.
-
-**Deliverable:** SSE-based streaming endpoint built into the recorder (via existing `on_record_written` callback) + `ahp tail` CLI command that connects to it.
-
-```bash
-ahp tail --port 8432          # streams events in real time
-ahp tail --follow agent.ahp   # watches chain file for new records
-```
+**Shipped in v0.2.0.** `ahp tail [--chain FILE] [--last N] [--format table|json] [--interval S]`. File-watching via polling. Handles partial writes, file rotation, Ctrl+C.
 
 ## Priority 3: Token Caching, Cost, Reasoning, and Provider Fields -- DONE
 

@@ -1,16 +1,22 @@
-"""AHP CLI — ahp log, ahp show, ahp verify, ahp export, ahp trace, ahp gaps, ahp init, ahp keygen."""
+"""AHP CLI — ahp log, ahp show, ahp verify, ahp export, ahp trace, ahp gaps, ahp tail, ahp init, ahp keygen."""
 
 from __future__ import annotations
 
 import json
 import os
+import struct
 import sys
+import time
+import zlib
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional  # noqa: F401 (used in annotations)
+from typing import Dict, List, Optional, Tuple  # noqa: F401 (used in annotations)
 
 from ahp.core.chain import (
+    HEADER_SIZE,
+    MAGIC,
+    MAX_RECORD_SIZE,
     ChainReader,
     parse_action_payload,
     parse_envelope,
@@ -405,6 +411,132 @@ def cmd_gaps(chain: Optional[str] = None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# cmd_tail — live tail records
+# ---------------------------------------------------------------------------
+
+
+def _read_frames_from(path: str, offset: int) -> Tuple[List[bytes], int]:
+    """Read chain frames starting at a byte offset.
+
+    Returns (list_of_stored_bytes, new_offset). Stops at EOF or first
+    corrupt/incomplete frame (safe for partially written files).
+    """
+    frames = []  # type: List[bytes]
+    with open(path, "rb") as f:
+        f.seek(offset)
+        while True:
+            length_bytes = f.read(4)
+            if len(length_bytes) < 4:
+                break
+            length = struct.unpack("<I", length_bytes)[0]
+            if length > MAX_RECORD_SIZE:
+                break
+            stored = f.read(length)
+            if len(stored) < length:
+                break
+            crc_bytes = f.read(4)
+            if len(crc_bytes) < 4:
+                break
+            expected_crc = struct.unpack("<I", crc_bytes)[0]
+            actual_crc = zlib.crc32(length_bytes + stored) & 0xFFFFFFFF
+            if actual_crc != expected_crc:
+                break
+            frames.append(stored)
+            offset += 4 + length + 4
+    return frames, offset
+
+
+def _print_record(stored: bytes, fmt: str) -> None:
+    """Print a single record in the specified format. Skips unparseable records."""
+    try:
+        if fmt == "json":
+            j = record_to_json(stored)
+            print(json.dumps(j, default=str), flush=True)
+        else:
+            summary = format_action_summary(stored)
+            seq = summary["sequence"]
+            ts = _ts(summary["timestamp_ms"])
+            rtype = summary["type"]
+            proto = summary["protocol"][:6]
+            tool = summary["tool_name"][:25]
+            status = summary["result_status"]
+            auth = summary["authorization"][:20]
+            latency = f"{summary['response_time_ms']}ms" if summary["tool_name"] != "\u2014" else "\u2014"
+            print(
+                f"{seq:>4} | {ts:8} | {rtype:10} | {proto:6} | {tool:25} | {status:7} | {auth:20} | {latency:>8}",
+                flush=True,
+            )
+    except Exception:
+        pass  # Skip unparseable records
+
+
+def cmd_tail(
+    chain: Optional[str] = None,
+    last: int = 10,
+    fmt: str = "table",
+    interval: float = 0.5,
+) -> None:
+    """Live tail — watch a chain file for new records."""
+    path = _find_chain(chain)
+
+    # Wait for file to exist
+    printed_waiting = False
+    while not Path(path).exists():
+        if not printed_waiting:
+            print(f"Waiting for {path}...", flush=True)
+            printed_waiting = True
+        time.sleep(interval)
+
+    # Wait for valid header
+    while Path(path).stat().st_size < HEADER_SIZE:
+        time.sleep(interval)
+
+    # Validate header
+    with open(path, "rb") as f:
+        header = f.read(HEADER_SIZE)
+        if header[:4] != MAGIC:
+            print(f"Invalid chain file: {path}")
+            sys.exit(1)
+
+    # Read all existing records to show the last N and find the end offset
+    all_frames, end_offset = _read_frames_from(path, HEADER_SIZE)
+
+    # Show last N
+    tail_frames = all_frames[-last:] if last > 0 else []
+    if tail_frames:
+        if fmt == "table":
+            print(
+                f"\n{'#':>4} | {'Time':8} | {'Type':10} | {'Proto':6} | {'Tool/Name':25}"
+                f" | {'Status':7} | {'Auth':20} | {'Latency':>8}"
+            )
+            print("\u2500" * 105)
+        for stored in tail_frames:
+            _print_record(stored, fmt)
+
+    print(f"\n\u2500\u2500\u2500 Tailing {Path(path).name} (Ctrl+C to stop) \u2500\u2500\u2500\n", flush=True)
+
+    # Poll loop
+    try:
+        while True:
+            time.sleep(interval)
+            try:
+                file_size = Path(path).stat().st_size
+            except OSError:
+                continue
+
+            # File rotation: if file shrunk, reset
+            if file_size < end_offset:
+                end_offset = HEADER_SIZE
+
+            if file_size > end_offset:
+                new_frames, end_offset = _read_frames_from(path, end_offset)
+                for stored in new_frames:
+                    _print_record(stored, fmt)
+    except KeyboardInterrupt:
+        print("\n")
+
+
+# ---------------------------------------------------------------------------
 # cmd_init — setup wizard
 # ---------------------------------------------------------------------------
 
@@ -540,6 +672,8 @@ def main() -> None:
         print("  ahp export [--chain FILE]                        Export as JSON")
         print("  ahp trace  <session_id_prefix> [--chain FILE]    Trace session decisions")
         print("  ahp gaps   [--chain FILE]                        List gap records")
+        print("  ahp tail   [--chain FILE] [--last N]             Live tail records")
+        print("             [--format table|json] [--interval S]")
         print("  ahp init   [<agent_name>]                        Setup wizard")
         print("  ahp keygen                                       Generate Ed25519 keypair")
         print("  ahp viewer [--chain FILE] [PORT]                 Open web viewer")
@@ -553,6 +687,8 @@ def main() -> None:
     unauthorized = False
     tree_flag = False
     witness_flag = False
+    fmt_flag = "table"  # type: str
+    interval_val = 0.5  # type: float
     positional = None  # type: Optional[str]
 
     # Parse flags
@@ -576,6 +712,12 @@ def main() -> None:
         elif args[i] == "--witness":
             witness_flag = True
             i += 1
+        elif args[i] == "--format" and i + 1 < len(args):
+            fmt_flag = args[i + 1]
+            i += 2
+        elif args[i] == "--interval" and i + 1 < len(args):
+            interval_val = float(args[i + 1])
+            i += 2
         elif args[i].startswith("--"):
             # Skip unknown flags
             i += 1
@@ -606,6 +748,8 @@ def main() -> None:
         cmd_trace(positional, chain=chain)
     elif cmd == "gaps":
         cmd_gaps(chain=chain)
+    elif cmd == "tail":
+        cmd_tail(chain=chain, last=last if last is not None else 10, fmt=fmt_flag, interval=interval_val)
     elif cmd == "init":
         cmd_init(agent_name=positional)
     elif cmd == "keygen":
