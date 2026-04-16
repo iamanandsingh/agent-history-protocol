@@ -156,15 +156,20 @@ def _verify_client_signature(body: dict) -> bool:
         return True
 
     try:
-        # Reconstruct the signed data (canonical checkpoint fields)
+        # Reconstruct the signed data (canonical checkpoint fields).
+        # Must include signing_key_id + public_key so that a stolen
+        # signature cannot be replayed with a swapped key identity.
         sign_data = json.dumps(
             {
                 "agent_id": body.get("agent_id"),
                 "chain_hash": body.get("chain_hash"),
                 "sequence": body.get("sequence"),
                 "timestamp_ms": body.get("timestamp_ms"),
+                "signing_key_id": body.get("signing_key_id"),
+                "public_key": body.get("public_key"),
             },
             sort_keys=True,
+            separators=(",", ":"),
         ).encode()
 
         signature = bytes.fromhex(signature_hex)
@@ -227,7 +232,10 @@ class WitnessHandler(BaseHTTPRequestHandler):
                 receipt_id = os.urandom(16).hex()
                 witness_timestamp = int(time.time() * 1000)
 
-                # Sign the checkpoint + witness timestamp
+                # Sign the checkpoint + witness timestamp. Canonicalisation
+                # matches the client signature path (§8.1): sort_keys=True
+                # with compact separators, so implementations in any
+                # language can reconstruct the blob deterministically.
                 sign_data = json.dumps(
                     {
                         "agent_id": agent_id,
@@ -236,6 +244,7 @@ class WitnessHandler(BaseHTTPRequestHandler):
                         "witness_timestamp": witness_timestamp,
                     },
                     sort_keys=True,
+                    separators=(",", ":"),
                 ).encode()
 
                 if witness_keys:

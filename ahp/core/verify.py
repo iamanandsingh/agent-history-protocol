@@ -172,6 +172,22 @@ def verify_chain(path: str, *, allow_nonzero_start: bool = False) -> VerifyResul
         prev_stored = stored
         records_checked = i + 1
 
+    # Reader stops silently on bad CRC / truncated body / oversized length /
+    # missing magic. Without this check, flipping a single byte mid-chain
+    # hides every record after it and verify_chain would still return
+    # valid=True for the intact prefix.
+    if reader.last_iteration_error is not None:
+        return VerifyResult(
+            valid=False,
+            records_checked=records_checked,
+            gaps=gaps,
+            broken_at=records_checked + 1 if records_checked else None,
+            error=(
+                f"Chain truncated or corrupted after record "
+                f"{records_checked}: {reader.last_iteration_error}"
+            ),
+        )
+
     return VerifyResult(
         valid=True,
         records_checked=records_checked,

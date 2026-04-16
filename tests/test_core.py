@@ -212,6 +212,68 @@ class TestChainWriterReader(unittest.TestCase):
             env = parse_envelope(stored)
             self.assertEqual(env["sequence"], i + 1)
 
+    def test_timestamp_monotonic_across_records(self):
+        """Each record's timestamp_ms must be >= the previous record's."""
+        writer = ChainWriter(self.chain_path)
+        for i in range(10):
+            writer.write_record(
+                ActionPayload(
+                    tool_name=f"tool_{i}",
+                    result_status=ResultStatus.SUCCESS,
+                    protocol=Protocol.MCP,
+                    action_type=ActionType.TOOL_CALL,
+                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                )
+            )
+        writer.close()
+
+        reader = ChainReader(self.chain_path)
+        prev_ts = 0
+        count = 0
+        for stored in reader.iter_records():
+            env = parse_envelope(stored)
+            self.assertGreaterEqual(env["timestamp_ms"], prev_ts)
+            prev_ts = env["timestamp_ms"]
+            count += 1
+        self.assertEqual(count, 10)
+
+    def test_timestamp_floored_across_backward_clock_step(self):
+        """A backward wall-clock step (NTP adjustment, VM resume, manual
+        clock change) must not produce non-monotonic timestamps in the
+        chain. The writer applies a monotonic non-decreasing floor so
+        record N+1's timestamp is always >= record N's.
+        """
+        import time as real_time
+        import unittest.mock
+
+        writer = ChainWriter(self.chain_path)
+        # Replace chain.py's module-level `time` reference with a shim that
+        # only controls time.time(); other attributes (e.g. sleep) fall
+        # through. This avoids affecting uuid7's unrelated time.time() use.
+        mock_time = unittest.mock.MagicMock(wraps=real_time)
+        mock_time.time = unittest.mock.Mock(side_effect=[2.0, 1.0, 2.5])
+        with unittest.mock.patch("ahp.core.chain.time", mock_time):
+            for name in ("first", "second", "third"):
+                writer.write_record(
+                    ActionPayload(
+                        tool_name=name,
+                        result_status=ResultStatus.SUCCESS,
+                        protocol=Protocol.MCP,
+                        action_type=ActionType.TOOL_CALL,
+                        authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                    )
+                )
+        writer.close()
+
+        reader = ChainReader(self.chain_path)
+        timestamps = [parse_envelope(s)["timestamp_ms"] for s in reader.iter_records()]
+        self.assertEqual(timestamps[0], 2000, "first record uses wall clock")
+        self.assertEqual(
+            timestamps[1], 2000,
+            "backward step must floor to previous ts, not regress to 1000",
+        )
+        self.assertEqual(timestamps[2], 2500, "wall clock moving forward again is honored")
+
 
 class TestVerification(unittest.TestCase):
     def setUp(self):
@@ -288,6 +350,81 @@ class TestVerification(unittest.TestCase):
         result = verify_chain(self.chain_path)
         self.assertFalse(result.valid)
         self.assertIsNotNone(result.broken_at)
+
+    def test_truncated_chain_is_detected(self):
+        """Truncating the tail of a chain file must fail verification.
+
+        Without truncation detection, iter_records silently stops at the
+        cut, verify_chain validates the readable prefix, and returns
+        valid=True — hiding every record after the cut from the auditor.
+        """
+        writer = ChainWriter(self.chain_path)
+        for i in range(4):
+            writer.write_record(
+                ActionPayload(
+                    tool_name=f"tool_{i}",
+                    result_status=ResultStatus.SUCCESS,
+                    protocol=Protocol.MCP,
+                    action_type=ActionType.TOOL_CALL,
+                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                )
+            )
+        writer.close()
+
+        file_size = os.path.getsize(self.chain_path)
+        with open(self.chain_path, "r+b") as f:
+            f.truncate(file_size - 20)  # cut off tail mid-record
+
+        result = verify_chain(self.chain_path)
+        self.assertFalse(result.valid, "Tail truncation must be detected")
+        self.assertIsNotNone(result.error)
+        err = result.error.lower()
+        # Depending on whether the cut lands in the body, the CRC, or the
+        # length prefix, the error wording differs — all three are valid
+        # "the tail was chopped off" signals.
+        self.assertTrue(
+            "truncat" in err or "crc" in err or "missing" in err,
+            f"Error did not describe truncation-family corruption: {result.error!r}",
+        )
+
+    def test_flipped_byte_without_crc_fix_is_detected(self):
+        """A corrupted record that does NOT have its CRC recomputed must
+        still fail verification — not silently stop the iterator and pass.
+        """
+        writer = ChainWriter(self.chain_path)
+        writer.write_record(BootPayload(agent_name="test"))
+        for i in range(3):
+            writer.write_record(
+                ActionPayload(
+                    tool_name=f"tool_{i}",
+                    result_status=ResultStatus.SUCCESS,
+                    protocol=Protocol.MCP,
+                    action_type=ActionType.TOOL_CALL,
+                    authorization=Authorization(type=AuthorizationType.AUTH_NONE),
+                )
+            )
+        writer.close()
+
+        # Flip one byte in the 3rd record body, leaving CRC intact → bad CRC.
+        import struct as _struct
+
+        with open(self.chain_path, "rb") as f:
+            data = bytearray(f.read())
+
+        offset = 16  # skip header
+        for _ in range(2):  # skip the first two records
+            rec_len = _struct.unpack("<I", data[offset : offset + 4])[0]
+            offset += 4 + rec_len + 4
+
+        # Flip a byte inside the body of record #3
+        data[offset + 4 + 10] ^= 0x5A
+
+        with open(self.chain_path, "wb") as f:
+            f.write(data)
+
+        result = verify_chain(self.chain_path)
+        self.assertFalse(result.valid, "Mid-chain CRC corruption must be detected")
+        self.assertIsNotNone(result.error)
 
     def test_empty_chain(self):
         # Create file with just header

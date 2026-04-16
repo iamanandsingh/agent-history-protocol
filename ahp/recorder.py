@@ -360,8 +360,14 @@ class AHPRecorder(RecorderBase):
         On failure, the error is logged but does NOT block the agent
         (per spec Section 8.5).
         """
+        # Capture chain state in one read so the value signed by the
+        # client, sent to the witness, and written into the WitnessPayload
+        # all refer to the same checkpoint. Re-reading self._chain.prev_hash
+        # later in the function would race with concurrent writers and
+        # produce a checkpoint_hash that does not match the signature.
         agent_id_hex = self._chain.agent_id.hex()
-        chain_hash_hex = self._chain.prev_hash.hex()
+        chain_hash_bytes = self._chain.prev_hash
+        chain_hash_hex = chain_hash_bytes.hex()
         sequence = self._chain.sequence
         timestamp_ms = int(time.time() * 1000)
 
@@ -369,19 +375,27 @@ class AHPRecorder(RecorderBase):
         key_id_hex = ""
         public_key_hex = ""
         if self._level >= 2 and self._keypair is not None:
-            # Sign canonical JSON of checkpoint fields (must match witness verification)
+            key_id_hex = self._keypair.key_id.hex()
+            public_key_hex = self._keypair.public_key_bytes.hex()
+            # Sign canonical JSON of checkpoint fields — must match witness
+            # verification. Binding signing_key_id + public_key into the
+            # signature prevents an attacker with a stolen signature from
+            # substituting a different key identity in the witness request
+            # body (the server would re-compute with the swapped values
+            # and reject the signature).
             sign_data = json.dumps(
                 {
                     "agent_id": agent_id_hex,
                     "chain_hash": chain_hash_hex,
                     "sequence": sequence,
                     "timestamp_ms": timestamp_ms,
+                    "signing_key_id": key_id_hex,
+                    "public_key": public_key_hex,
                 },
                 sort_keys=True,
+                separators=(",", ":"),
             ).encode()
             sig_hex = sign(sign_data, self._keypair.private_key_bytes).hex()
-            key_id_hex = self._keypair.key_id.hex()
-            public_key_hex = self._keypair.public_key_bytes.hex()
 
         for endpoint in self._witness_endpoints:
             try:
@@ -396,13 +410,20 @@ class AHPRecorder(RecorderBase):
                     public_key=public_key_hex,
                 )
                 if receipt is not None:
+                    # Receipt keys match the witness server response
+                    # (`witness_*` prefixed). An earlier version read
+                    # unprefixed keys (`signature`, `public_key`,
+                    # `timestamp_ms`) that do not exist in the response,
+                    # so every WitnessPayload ended up with zero-byte
+                    # signatures and the wrong timestamp — Level 3
+                    # attestation was silently broken.
                     witness_payload = WitnessPayload(
                         witness_id=receipt.get("witness_id", endpoint),
                         checkpoint_seq=sequence,
-                        checkpoint_hash=self._chain.prev_hash,
-                        witness_timestamp=receipt.get("timestamp_ms", timestamp_ms),
-                        receipt_signature=bytes.fromhex(receipt.get("signature", "00" * 64)),
-                        witness_public_key=bytes.fromhex(receipt.get("public_key", "00" * 32)),
+                        checkpoint_hash=chain_hash_bytes,
+                        witness_timestamp=receipt.get("witness_timestamp", timestamp_ms),
+                        receipt_signature=bytes.fromhex(receipt.get("witness_signature", "00" * 64)),
+                        witness_public_key=bytes.fromhex(receipt.get("witness_public_key", "00" * 32)),
                     )
                     self._chain.write_record(witness_payload)
             except Exception as exc:

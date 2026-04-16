@@ -728,15 +728,22 @@ class TestWitnessServerClient(unittest.TestCase):
             chain_hash = "ab" * 32
             sequence = 100
             timestamp_ms = int(time.time() * 1000)
+            signing_key_id_hex = kp.key_id.hex()
+            public_key_hex = kp.public_key_bytes.hex()
 
+            # Matches witness server reconstruction: six fields,
+            # sort_keys=True with compact separators per spec §8.1.
             sign_data = json.dumps(
                 {
                     "agent_id": agent_id,
                     "chain_hash": chain_hash,
                     "sequence": sequence,
                     "timestamp_ms": timestamp_ms,
+                    "signing_key_id": signing_key_id_hex,
+                    "public_key": public_key_hex,
                 },
                 sort_keys=True,
+                separators=(",", ":"),
             ).encode()
             sig_hex = sign(sign_data, kp.private_key_bytes).hex()
 
@@ -747,8 +754,8 @@ class TestWitnessServerClient(unittest.TestCase):
                 sequence=sequence,
                 timestamp_ms=timestamp_ms,
                 signature=sig_hex,
-                signing_key_id=kp.key_id.hex(),
-                public_key=kp.public_key_bytes.hex(),
+                signing_key_id=signing_key_id_hex,
+                public_key=public_key_hex,
             )
 
             self.assertIsNotNone(receipt, "Witness returned no receipt")
@@ -761,6 +768,76 @@ class TestWitnessServerClient(unittest.TestCase):
             identity = get_identity(endpoint)
             self.assertIsNotNone(identity)
             self.assertEqual(identity["witness_id"], WITNESS_ID)
+
+        finally:
+            server.shutdown()
+
+    def test_witness_rejects_signature_with_swapped_key_id(self):
+        """An attacker who captures a valid checkpoint signature must not be
+        able to replay it against the witness with a substituted
+        signing_key_id or public_key. The signed blob now binds both
+        fields, so the server's reconstruction diverges and verification
+        fails.
+        """
+        from witness.server import WitnessHandler
+
+        server = HTTPServer(("localhost", 0), WitnessHandler)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            endpoint = f"http://localhost:{port}"
+
+            import json
+            from urllib.error import HTTPError
+            from urllib.request import Request, urlopen
+
+            from ahp.core.signing import generate_keypair, sign
+
+            kp_real = generate_keypair()
+            kp_attacker = generate_keypair()
+
+            agent_id = "victim-agent"
+            chain_hash = "cd" * 32
+            sequence = 42
+            timestamp_ms = int(time.time() * 1000)
+
+            sign_data = json.dumps(
+                {
+                    "agent_id": agent_id,
+                    "chain_hash": chain_hash,
+                    "sequence": sequence,
+                    "timestamp_ms": timestamp_ms,
+                    "signing_key_id": kp_real.key_id.hex(),
+                    "public_key": kp_real.public_key_bytes.hex(),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+            sig_hex = sign(sign_data, kp_real.private_key_bytes).hex()
+
+            # Tampered body: same signature, but signing_key_id + public_key
+            # swapped to the attacker's key. Pre-fix, this would be accepted
+            # because the old 4-field signature didn't cover the key fields.
+            body = {
+                "agent_id": agent_id,
+                "chain_hash": chain_hash,
+                "sequence": sequence,
+                "timestamp_ms": timestamp_ms,
+                "signature": sig_hex,
+                "signing_key_id": kp_attacker.key_id.hex(),
+                "public_key": kp_attacker.public_key_bytes.hex(),
+            }
+
+            req = Request(
+                endpoint + "/ahp/v1/checkpoints",
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with self.assertRaises(HTTPError) as ctx:
+                urlopen(req, timeout=5)
+            self.assertEqual(ctx.exception.code, 403)
 
         finally:
             server.shutdown()

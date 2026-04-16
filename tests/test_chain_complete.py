@@ -126,8 +126,8 @@ class TestCheckpoint(unittest.TestCase):
         for i in range(5):
             writer.write_record(_action(f"tool_{i}"))
 
-        # Checkpoint at seq=6
-        cp_rec = writer.write_checkpoint()
+        # Checkpoint at seq=6 (unsigned — Level 1 semantics).
+        cp_rec = writer.write_unsigned_checkpoint()
         self.assertEqual(cp_rec.sequence, 6)
         self.assertEqual(cp_rec.record_type, RecordType.CHECKPOINT)
 

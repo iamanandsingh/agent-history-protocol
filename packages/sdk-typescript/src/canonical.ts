@@ -154,19 +154,19 @@ function serializeAction(buf: BufferWriter, p: ActionPayload): void {
   buf.writeUint32(p.cache_read_tokens);            // tag 15
   buf.writeUint32(p.cache_creation_tokens);        // tag 16
   buf.writeUint32(p.reasoning_tokens);             // tag 17
-  buf.writeUint64(BigInt(p.cost_nano_usd));    // tag 18
-  buf.writeString(p.provider);                     // tag 18
-  // tag 19: Authorization (nested, inline)
-  buf.writeUint32(p.authorization.type);           // tag 19.1: enum
-  buf.writeUint32(p.authorization.entries.length);  // tag 19.2: count
+  buf.writeUint64(BigInt(p.cost_nano_usd));        // tag 18
+  buf.writeString(p.provider);                     // tag 19
+  // tag 20: Authorization (nested, inline)
+  buf.writeUint32(p.authorization.type);           // tag 20.1: enum
+  buf.writeUint32(p.authorization.entries.length); // tag 20.2: count
   for (const entry of p.authorization.entries) {
-    buf.writeUint32(entry.authorizer_type);         // tag 19.2.1: enum
-    buf.writeString(entry.authorizer_id);           // tag 19.2.2
-    buf.writeBytes(entry.authorizer_agent_id);      // tag 19.2.3: 16 bytes UUID
-    buf.writeUint64(entry.authorizer_seq);          // tag 19.2.4
-    buf.writeUint32(entry.decision);                // tag 19.2.5: enum
-    buf.writeString(entry.condition);               // tag 19.2.6
-    buf.writeUint64(entry.timestamp_ms);            // tag 19.2.7
+    buf.writeUint32(entry.authorizer_type);         // tag 20.2.1: enum
+    buf.writeString(entry.authorizer_id);           // tag 20.2.2
+    buf.writeBytes(entry.authorizer_agent_id);      // tag 20.2.3: 16 bytes UUID
+    buf.writeUint64(entry.authorizer_seq);          // tag 20.2.4
+    buf.writeUint32(entry.decision);                // tag 20.2.5: enum
+    buf.writeString(entry.condition);               // tag 20.2.6
+    buf.writeUint64(entry.timestamp_ms);            // tag 20.2.7
   }
 }
 

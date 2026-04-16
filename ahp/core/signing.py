@@ -10,6 +10,7 @@ from typing import List
 logger = logging.getLogger("ahp.signing")
 
 try:
+    from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
@@ -62,12 +63,11 @@ def verify_signature(message: bytes, signature: bytes, public_key_bytes: bytes) 
         raise RuntimeError(
             "The 'cryptography' package is required for Level 2+ signing. Install with: pip install ahp[signing]"
         )
+    public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
         public_key.verify(signature, message)
         return True
-    except Exception as exc:
-        logger.debug("verify_signature failed: %s: %s", type(exc).__name__, exc)
+    except InvalidSignature:
         return False
 
 

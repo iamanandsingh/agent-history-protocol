@@ -534,7 +534,12 @@ function append_repeated_string(buf, strings):
 
 ### 4.4 Schema Versioning
 
-The `schema_version` field in the common envelope identifies which version of this specification the record conforms to. This specification defines `schema_version = 1`.
+The `schema_version` field in the common envelope identifies which version of this specification the record conforms to. This specification defines `schema_version = 2`.
+
+**Version history:**
+
+- `schema_version = 1` — pre-1.0 draft. ActionPayload tags 1–14 only; omits `cache_read_tokens`, `cache_creation_tokens`, `reasoning_tokens`, `cost_nano_usd`, `provider`. Reserved; no longer produced by reference implementations.
+- `schema_version = 2` — current. ActionPayload extends v1 with the five fields above at tags 15–19, followed by the Authorization block at tag 20. All other record types are unchanged from v1.
 
 **Versioning rules:**
 
@@ -714,8 +719,25 @@ Request:
 | `chain_hash` | string (hex, 64 chars) | Current chain head hash |
 | `sequence` | uint64 | Current sequence number |
 | `timestamp_ms` | uint64 | Agent's clock |
-| `signature` | string (hex) | Agent's Ed25519 signature over the above fields |
-| `signing_key_id` | string (hex) | Agent's key identifier |
+| `signing_key_id` | string (hex) | SHA-256 of the public key used to sign |
+| `public_key` | string (hex) | Agent's Ed25519 public key (32 bytes, hex-encoded) |
+| `signature` | string (hex) | Agent's Ed25519 signature — see below |
+
+The agent MUST produce `signature` as the Ed25519 signature over the canonical JSON of the six fields `{agent_id, chain_hash, sequence, timestamp_ms, signing_key_id, public_key}`. The canonicalisation rules (below) apply to every signed blob in the witness protocol, both request and response. Binding `signing_key_id` and `public_key` into the signed blob prevents a captured signature from being replayed with a substituted key identity. Witnesses MUST reconstruct the identical blob from the request body and verify before accepting the checkpoint.
+
+**Canonical JSON rules for witness signatures:**
+
+- UTF-8 encoded output.
+- Keys sorted lexicographically by Unicode code point.
+- No insignificant whitespace: element separator is exactly `,`, key-value separator is exactly `:`.
+- String values are enclosed in `"`; our fields are ASCII-only (hex or UUID strings), so no escaping decisions arise in practice.
+- Integers rendered as their shortest decimal form (no leading zeros, no `+` sign, no decimal point, no exponent).
+- Values MUST NOT be `null`, floats, nested objects, or arrays — all witness-protocol fields are strings or uint64 integers.
+
+This is a strict subset of RFC 8785 (JSON Canonicalization Scheme); any conformant JCS library produces the same bytes for these inputs. Reference implementations:
+
+- Python: `json.dumps(obj, sort_keys=True, separators=(",", ":"))`
+- JavaScript/TypeScript: `JSON.stringify` does NOT sort keys; implementations MUST sort before stringifying (or use a JCS library).
 
 Response:
 | Field | Type | Description |
@@ -723,7 +745,8 @@ Response:
 | `receipt_id` | string (UUID) | Unique receipt identifier |
 | `witness_id` | string | Witness identity |
 | `witness_timestamp` | uint64 | Witness's own clock (ms UTC) |
-| `witness_signature` | string (hex) | Witness signs (request fields + `witness_timestamp`) |
+| `witness_signature` | string (hex) | Witness's Ed25519 signature over `{agent_id, chain_hash, sequence, witness_timestamp}`, canonicalised by the rules above |
+| `witness_public_key` | string (hex, 64 chars) | Witness's Ed25519 public key for verifying `witness_signature` |
 
 **GET /ahp/v1/receipts/{receipt_id}**
 

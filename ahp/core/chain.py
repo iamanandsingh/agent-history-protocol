@@ -60,6 +60,13 @@ class ChainWriter:
         self._writes_since_fsync = 0
         self._lock = threading.Lock()
 
+        # Monotonic non-decreasing floor for record timestamps. Wall-clock
+        # time can step backward (NTP adjustments, VM resume, manual clock
+        # changes). The chain requires timestamps to be non-decreasing
+        # within a session, so every default-timestamp write uses
+        # max(wall_now_ms, self._last_ts_ms).
+        self._last_ts_ms: int = 0
+
         self._lock_file: Optional[IO[str]] = None
         self._data_file: Optional[IO[bytes]] = None  # must be set before _acquire_file_lock (for safe __del__)
         self._lock_path = str(self.path) + ".lock"
@@ -202,8 +209,21 @@ class ChainWriter:
         )
         return self.write_record(payload)
 
-    def write_checkpoint(self) -> Record:
-        """Write a BatchCheckpoint summarizing current chain state."""
+    def write_unsigned_checkpoint(self) -> Record:
+        """Write an unsigned BatchCheckpoint summarizing current chain state.
+
+        The resulting CheckpointPayload has zero-byte ``merkle_root``,
+        ``signature``, and ``signing_key_id`` — it is therefore only
+        appropriate for Level 1 chains that do not carry cryptographic
+        attestations.
+
+        For Level 2+ chains, DO NOT call this method. Build a fully
+        populated :class:`CheckpointPayload` (including merkle root,
+        Ed25519 signature, and signing_key_id) and pass it to
+        :meth:`write_record` directly. The higher-level
+        :class:`AHPRecorder` handles this in its own signed-checkpoint
+        path; this method exists for Level 1 use and tests only.
+        """
         with self._lock:
             payload = CheckpointPayload(
                 record_count=self._record_count + 1,  # including this checkpoint
@@ -218,11 +238,22 @@ class ChainWriter:
         """Internal write_record without acquiring the lock (caller must hold it)."""
         self._sequence += 1
 
+        # Resolve timestamp with a monotonic non-decreasing floor.
+        # Explicit caller-provided timestamps are trusted as-is (used by
+        # tests and recovery replay). Default-path wall-clock reads are
+        # floored so an NTP step cannot regress the chain.
+        if timestamp_ms is None:
+            wall_ms = int(time.time() * 1000)
+            ts_ms = wall_ms if wall_ms >= self._last_ts_ms else self._last_ts_ms
+        else:
+            ts_ms = timestamp_ms
+        self._last_ts_ms = ts_ms
+
         record = Record(
             record_id=uuid7(),
             agent_id=self.agent_id,
             session_id=session_id or self.session_id,
-            timestamp_ms=int(time.time() * 1000) if timestamp_ms is None else timestamp_ms,
+            timestamp_ms=ts_ms,
             sequence=self._sequence,
             prev_hash=self._prev_hash,
             schema_version=SCHEMA_VERSION,
@@ -339,32 +370,73 @@ class ChainReader:
 
     def __init__(self, path: Union[str, Path]):
         self.path = Path(path)
+        # Populated by the most recent iter_records() call. None means iteration
+        # reached clean EOF; a string describes the corruption that stopped it.
+        # Callers that need to detect silent truncation (e.g. verify_chain)
+        # MUST check this after consuming the iterator.
+        self.last_iteration_error: Optional[str] = None
 
     def iter_records(self):
-        """Yield stored_bytes one at a time. Never loads all into memory."""
+        """Yield stored_bytes one at a time. Never loads all into memory.
+
+        On corruption (bad CRC, truncated body, oversized length, missing
+        magic), iteration stops early and ``self.last_iteration_error`` is
+        set to a descriptive string. Clean EOF leaves it as ``None``.
+        """
+        self.last_iteration_error = None
+
         if not self.path.exists():
+            self.last_iteration_error = "file does not exist"
             return
         with open(self.path, "rb") as f:
             header = f.read(HEADER_SIZE)
-            if len(header) < HEADER_SIZE or header[:4] != MAGIC:
+            if len(header) < HEADER_SIZE:
+                self.last_iteration_error = (
+                    f"truncated header ({len(header)}/{HEADER_SIZE} bytes)"
+                )
                 return
+            if header[:4] != MAGIC:
+                self.last_iteration_error = f"bad magic bytes: {header[:4]!r}"
+                return
+            offset = HEADER_SIZE
             while True:
                 length_bytes = f.read(4)
+                if len(length_bytes) == 0:
+                    return  # clean EOF
                 if len(length_bytes) < 4:
-                    break
+                    self.last_iteration_error = (
+                        f"truncated length prefix at offset {offset}"
+                    )
+                    return
                 length = struct.unpack("<I", length_bytes)[0]
                 if length > MAX_RECORD_SIZE:
-                    break
+                    self.last_iteration_error = (
+                        f"record length {length} exceeds MAX_RECORD_SIZE "
+                        f"at offset {offset}"
+                    )
+                    return
                 stored = f.read(length)
                 if len(stored) < length:
-                    break
+                    self.last_iteration_error = (
+                        f"truncated record body at offset {offset + 4}: "
+                        f"got {len(stored)}/{length} bytes"
+                    )
+                    return
                 crc_bytes = f.read(4)
                 if len(crc_bytes) < 4:
-                    break
+                    self.last_iteration_error = (
+                        f"missing CRC32 at offset {offset + 4 + length}"
+                    )
+                    return
                 expected_crc = struct.unpack("<I", crc_bytes)[0]
                 actual_crc = zlib.crc32(length_bytes + stored) & 0xFFFFFFFF
                 if actual_crc != expected_crc:
-                    break
+                    self.last_iteration_error = (
+                        f"CRC mismatch at offset {offset}: "
+                        f"expected {expected_crc:08x}, got {actual_crc:08x}"
+                    )
+                    return
+                offset += 4 + length + 4
                 yield stored
 
     def read_all(self) -> list:
