@@ -87,7 +87,7 @@ class TestWitnessAutoFlow(unittest.TestCase):
 
         from ahp.core.chain import ChainReader, parse_envelope, parse_witness_payload
         from ahp.core.signing import verify_signature
-        from ahp.core.types import RecordType, ZERO_HASH_32
+        from ahp.core.types import ZERO_HASH_32, RecordType
         from witness.server import WitnessHandler
 
         server = HTTPServer(("localhost", 0), WitnessHandler)
