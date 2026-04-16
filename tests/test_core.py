@@ -269,7 +269,8 @@ class TestChainWriterReader(unittest.TestCase):
         timestamps = [parse_envelope(s)["timestamp_ms"] for s in reader.iter_records()]
         self.assertEqual(timestamps[0], 2000, "first record uses wall clock")
         self.assertEqual(
-            timestamps[1], 2000,
+            timestamps[1],
+            2000,
             "backward step must floor to previous ts, not regress to 1000",
         )
         self.assertEqual(timestamps[2], 2500, "wall clock moving forward again is honored")

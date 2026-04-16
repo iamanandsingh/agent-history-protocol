@@ -182,10 +182,7 @@ def verify_chain(path: str, *, allow_nonzero_start: bool = False) -> VerifyResul
             records_checked=records_checked,
             gaps=gaps,
             broken_at=records_checked + 1 if records_checked else None,
-            error=(
-                f"Chain truncated or corrupted after record "
-                f"{records_checked}: {reader.last_iteration_error}"
-            ),
+            error=(f"Chain truncated or corrupted after record {records_checked}: {reader.last_iteration_error}"),
         )
 
     return VerifyResult(

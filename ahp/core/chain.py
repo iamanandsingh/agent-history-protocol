@@ -391,9 +391,7 @@ class ChainReader:
         with open(self.path, "rb") as f:
             header = f.read(HEADER_SIZE)
             if len(header) < HEADER_SIZE:
-                self.last_iteration_error = (
-                    f"truncated header ({len(header)}/{HEADER_SIZE} bytes)"
-                )
+                self.last_iteration_error = f"truncated header ({len(header)}/{HEADER_SIZE} bytes)"
                 return
             if header[:4] != MAGIC:
                 self.last_iteration_error = f"bad magic bytes: {header[:4]!r}"
@@ -404,36 +402,27 @@ class ChainReader:
                 if len(length_bytes) == 0:
                     return  # clean EOF
                 if len(length_bytes) < 4:
-                    self.last_iteration_error = (
-                        f"truncated length prefix at offset {offset}"
-                    )
+                    self.last_iteration_error = f"truncated length prefix at offset {offset}"
                     return
                 length = struct.unpack("<I", length_bytes)[0]
                 if length > MAX_RECORD_SIZE:
-                    self.last_iteration_error = (
-                        f"record length {length} exceeds MAX_RECORD_SIZE "
-                        f"at offset {offset}"
-                    )
+                    self.last_iteration_error = f"record length {length} exceeds MAX_RECORD_SIZE at offset {offset}"
                     return
                 stored = f.read(length)
                 if len(stored) < length:
                     self.last_iteration_error = (
-                        f"truncated record body at offset {offset + 4}: "
-                        f"got {len(stored)}/{length} bytes"
+                        f"truncated record body at offset {offset + 4}: got {len(stored)}/{length} bytes"
                     )
                     return
                 crc_bytes = f.read(4)
                 if len(crc_bytes) < 4:
-                    self.last_iteration_error = (
-                        f"missing CRC32 at offset {offset + 4 + length}"
-                    )
+                    self.last_iteration_error = f"missing CRC32 at offset {offset + 4 + length}"
                     return
                 expected_crc = struct.unpack("<I", crc_bytes)[0]
                 actual_crc = zlib.crc32(length_bytes + stored) & 0xFFFFFFFF
                 if actual_crc != expected_crc:
                     self.last_iteration_error = (
-                        f"CRC mismatch at offset {offset}: "
-                        f"expected {expected_crc:08x}, got {actual_crc:08x}"
+                        f"CRC mismatch at offset {offset}: expected {expected_crc:08x}, got {actual_crc:08x}"
                     )
                     return
                 offset += 4 + length + 4

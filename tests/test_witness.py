@@ -134,18 +134,21 @@ class TestWitnessAutoFlow(unittest.TestCase):
                     witness_records.append((env, wp))
 
             self.assertGreater(
-                len(witness_records), 0,
+                len(witness_records),
+                0,
                 "recorder did not emit any WitnessPayload to the chain",
             )
             env, wp = witness_records[0]
 
             # The headline regression: neither field may be zeroed.
             self.assertNotEqual(
-                wp["receipt_signature"], b"\x00" * 64,
+                wp["receipt_signature"],
+                b"\x00" * 64,
                 "receipt_signature is all zeros — client misread the receipt field name",
             )
             self.assertNotEqual(
-                wp["witness_public_key"], ZERO_HASH_32,
+                wp["witness_public_key"],
+                ZERO_HASH_32,
                 "witness_public_key is all zeros — client misread the receipt field name",
             )
 
