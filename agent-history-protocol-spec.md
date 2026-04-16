@@ -1,6 +1,6 @@
 # Agent History Protocol Specification
 
-Version 1.0-draft-01 · March 2026 · Apache 2.0
+Version 2.0 · April 2026 · Apache 2.0
 
 ---
 

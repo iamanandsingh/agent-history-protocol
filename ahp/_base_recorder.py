@@ -42,7 +42,9 @@ SDK_NAME = "ahp-python"
 try:
     SDK_VERSION = importlib.metadata.version("open-ahp")
 except importlib.metadata.PackageNotFoundError:
-    SDK_VERSION = "0.1.0"
+    # Fallback when package metadata is unavailable (e.g. editable install
+    # without a dist-info). Kept in sync with pyproject.toml version.
+    SDK_VERSION = "2.0.0"
 
 # Map string fsync modes from config to enum values
 FSYNC_MAP = {

@@ -1,6 +1,6 @@
 """Agent History Protocol — tamper-evident recording for AI agents."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 from ahp._globals import get_default_recorder, set_default_recorder
 from ahp.async_recorder import AsyncAHPRecorder
